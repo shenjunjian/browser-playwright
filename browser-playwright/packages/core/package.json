@@ -1,6 +1,6 @@
 {
   "name": "browser-playwright",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -13,7 +13,9 @@
   "module": "./dist/browser-playwright.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "package.json"
   ],
   "scripts": {
     "build": "vp build && tsc -p tsconfig.build.json",
