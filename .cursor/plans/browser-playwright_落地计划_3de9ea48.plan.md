@@ -22,7 +22,7 @@ todos:
     status: completed
   - id: phase6-vue-ui
     content: 实现 browser-playwright-vue 浮动调试组件
-    status: pending
+    status: completed
   - id: phase7-site-demo
     content: 在 apps/site 接入演示页并验收 README 示例脚本
     status: pending
