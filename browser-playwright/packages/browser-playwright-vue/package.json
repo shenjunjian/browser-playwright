@@ -3,21 +3,37 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/browser-playwright-vue.js"
+    },
+    "./style.css": "./dist/browser-playwright-vue.css"
+  },
+  "main": "./dist/browser-playwright-vue.js",
+  "module": "./dist/browser-playwright-vue.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "dev": "vp dev",
-    "build": "vue-tsc -b && vp build",
-    "preview": "vp preview"
+    "build": "vp build && vue-tsc -p tsconfig.build.json --declaration --emitDeclarationOnly",
+    "dev": "vp build --watch"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
   },
   "dependencies": {
-    "vue": "^3.5.39"
+    "browser-playwright": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.13.2",
+    "@types/node": "catalog:",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/tsconfig": "^0.9.1",
-    "typescript": "~6.0.2",
+    "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",
+    "vue": "^3.5.39",
     "vue-tsc": "^3.3.5"
   }
 }

@@ -1,8 +1,19 @@
-import { defineConfig } from "vite";
+import { resolve } from "node:path";
 import vue from "@vitejs/plugin-vue";
-import { lazyPlugins } from "vite-plus";
+import { defineConfig, lazyPlugins } from "vite-plus";
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: lazyPlugins(() => [vue()]),
+  resolve: {
+    alias: {
+      "browser-playwright": resolve(
+        import.meta.dirname,
+        "../../packages/core/src/index.ts",
+      ),
+      "browser-playwright-vue": resolve(
+        import.meta.dirname,
+        "../../packages/browser-playwright-vue/src/index.ts",
+      ),
+    },
+  },
 });

@@ -7,9 +7,13 @@ catalogMode: prefer
 
 catalog:
   "@types/node": ^24
+  happy-dom: ^20.11.0
+  tsx: ^4.20.5
   typescript: ^6.0.3
   vite: npm:@voidzero-dev/vite-plus-core@0.2.5
   vite-plus: 0.2.5
+allowBuilds:
+  esbuild: true
 overrides:
   vite: "catalog:"
 peerDependencyRules:

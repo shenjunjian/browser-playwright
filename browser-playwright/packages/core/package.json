@@ -1,15 +1,30 @@
 {
-  "name": "core",
+  "name": "browser-playwright",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/browser-playwright.js"
+    }
+  },
+  "main": "./dist/browser-playwright.js",
+  "module": "./dist/browser-playwright.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "dev": "vp dev",
-    "build": "tsc && vp build",
-    "preview": "vp preview"
+    "build": "vp build && tsc -p tsconfig.build.json",
+    "dev": "vp build --watch",
+    "smoke": "tsx scripts/smoke.mts"
   },
   "devDependencies": {
-    "typescript": "~6.0.2",
+    "@types/node": "catalog:",
+    "happy-dom": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   }
