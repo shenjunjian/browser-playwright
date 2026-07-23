@@ -70,21 +70,35 @@ import {
 | API | 官方 | 本库 |
 |-----|------|------|
 | `page.goto(url)` | 浏览器导航，返回 Response | 同应用路由：`modal#hash`、`#hash`、`/path` 用 `pushState` / `hash`；完整 `http(s)://` 才 `location.assign`。返回 `null` |
-| `page.evaluate` | 跨进程序列化 | 同 realm 直接执行；可直接操作 DOM，无需序列化 |
+| `page.evaluate` / `locator.evaluate` | 跨进程序列化 | 同 realm 直接执行；可直接操作 DOM，无需序列化。`locator.evaluate` 将匹配元素作为首参传入 |
+| `locator.boundingBox` | 相对页面坐标系 | 基于 `getBoundingClientRect`（视口坐标）；不可见时返回 `null` |
 | `page.addInitScript` | 每次导航前注入 | 立即执行；并在 `hashchange` / `popstate` 上尽量重跑。不支持 `{ path }`，请用函数或 `content` |
 | `page.on(...)` | 多种页面事件 | 当前支持 `console`、`pageerror`（挂 console hook / `error` / `unhandledrejection`） |
 | `page.route` | CDP Fetch，覆盖导航与多数请求 | 仅拦截 `fetch` 与 `XMLHttpRequest`；**不覆盖**文档导航、`<img>`/`<script>`、Service Worker、WebSocket |
 | `page.screenshot` / `locator.screenshot` | CDP 像素截图 | DOM → canvas（SVG foreignObject）；无 canvas 时退化为 HTML fingerprint。像素**不承诺**与官方一致 |
+| `locator.ariaSnapshot` / `toMatchAriaSnapshot` | 完整 ARIA 树 + refs | 降级为 role/name YAML 片段；不承诺与官方树一致 |
+| `locator.dragTo` / `page.dragAndDrop` | CDP 拖拽 | 合成 mousedown/drag/drop/mouseup，非完整 HTML5 DnD |
+| `page.setViewportSize` / `emulateMedia` | 浏览器级 | 尽力改写；matchMedia / 真实视口可能无效 |
 | `expect(...).toHaveScreenshot` | 文件基线 + 像素比对 | 内存基线 + 字节/哈希比对；首次命名调用会建立基线并视为通过 |
 | `test` | Playwright Test Runner | 轻量注册表：`test()` 注册，`runTests()` / `runScript` 执行；fixture 仅 `{ page }` |
 | `FrameLocator` | 可进任意 frame | 同源 iframe 优先；跨域受限 |
 
+### 显式不支持（调用即抛错）
+
+依赖 Browser / CDP / Inspector 的 API 已挂在 `Page` 上，但会抛出 `not supported in-page`：
+
+`page.$` / `$$` / `$eval` / `$$eval`、`context`、`opener`、`bringToFront`、`pdf`、`video`、`workers`、`pause`、`pickLocator`、`cancelPickLocator`、`requestGC`、`requests`、`routeFromHAR`、`routeWebSocket`、`setExtraHTTPHeaders`、`addLocatorHandler`、`removeLocatorHandler`、`exposeBinding`、`waitForRequest`、`waitForResponse`。
+
+`page.close()` 仅标记关闭并拆除事件 hook，不关闭真实浏览器标签。
+
 ### 对齐较好的部分
 
-- **查询**：`locator`、`getByRole` / `getByText` / `getByTestId` / `getByLabel` / `getByPlaceholder` / `getByAltText` / `getByTitle`、`filter`、`first` / `nth` / `last`、`and` / `or`
-- **动作**：`click`、`dblclick`、`hover`、`fill`、`type`、`press`、`check` / `uncheck`、`selectOption`、`focus` / `blur`（带 auto-wait）
+- **查询**：`locator`、`getByRole` / `getByText` / `getByTestId` / `getByLabel` / `getByPlaceholder` / `getByAltText` / `getByTitle`、`filter`、`first` / `nth` / `last`、`and` / `or`、`describe` / `description`
+- **读取**：`count`、`all` / `allInnerTexts` / `allTextContents`、`innerText` / `innerHTML` / `textContent`、`inputValue`、`getAttribute`、`evaluate` / `evaluateAll` / `evaluateHandle`、`boundingBox`、`ariaSnapshot`、`screenshot`、状态查询（`isVisible` / `isEditable` / `isChecked` 等）
+- **动作**：`click`、`dblclick`、`hover`、`fill`、`clear`、`type` / `pressSequentially`、`press`、`check` / `uncheck` / `setChecked`、`selectOption`、`selectText`、`focus` / `blur`、`tap`、`dispatchEvent`、`scrollIntoViewIfNeeded`、`setInputFiles`、`dragTo`（带 auto-wait）
+- **Page 快捷方法**：上述 selector 版快捷方法（`page.click` / `fill` / `isVisible`…）以及 `title` / `url` / `content` / `setContent` / `waitFor*` / `exposeFunction` / `addScriptTag` / `addStyleTag` 等
 - **点击事件顺序**：`pointerdown` → `mousedown` → `pointerup` → `mouseup` → `click`
-- **断言**：`toBeVisible`、`toHaveText`、`toHaveCount`、`toHaveAttribute` 等，带轮询重试
+- **断言**：Locator 断言全集（含 `toHaveRole`、`toHaveClass`、`toBeInViewport`、`toMatchAriaSnapshot` 等），带轮询重试；支持 `.not`
 - **网络 Route 表面**：`fulfill` / `abort` / `continue` 形状接近官方
 
 ## 导出一览
@@ -191,6 +205,8 @@ const text = await page.locator('h1').innerText()
 const html = await page.locator('.card').innerHTML()
 const value = await page.locator('input').inputValue()
 const attr = await page.locator('a').getAttribute('href')
+const tag = await page.locator('h1').evaluate((el) => el.tagName)
+const box = await page.locator('h1').boundingBox() // { x, y, width, height } | null
 
 // 组合
 page.locator('ul').locator('li').filter({ hasText: 'foo' }).nth(1)
@@ -227,6 +243,19 @@ await expect(page.locator('#agree')).toBeChecked()
 await expect(page.locator('button')).toBeEnabled()
 await expect(page.locator('button')).toBeDisabled()
 await expect(page.locator('.x')).toBeAttached()
+await expect(page.locator('input')).toBeEditable()
+await expect(page.locator('input')).toBeFocused()
+await expect(page.locator('input')).toBeEmpty()
+await expect(page.locator('.card')).toBeInViewport()
+await expect(page.locator('.row')).toHaveClass(/selected/)
+await expect(page.locator('.row')).toContainClass('selected')
+await expect(page.locator('.box')).toHaveCSS('display', 'flex')
+await expect(page.locator('#lastname')).toHaveId('lastname')
+await expect(page.locator('.x')).toHaveJSProperty('hidden', false)
+await expect(page.getByRole('button')).toHaveRole('button')
+await expect(page.locator('select')).toHaveValues(['a', 'b'])
+await expect(page.getByRole('button')).toHaveAccessibleName('提交')
+await expect(page.locator('body')).toMatchAriaSnapshot(`- main`)
 await expect(page.locator('.panel')).not.toBeVisible()
 
 // 截图断言（内存基线；非 CDP 像素级）

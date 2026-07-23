@@ -57,6 +57,12 @@ browser-playwright/                 # 仓库根（本文件所在处）
 - `page.screenshot` / `locator.screenshot`：DOM→canvas（SVG foreignObject）；无 canvas 时退化为 HTML fingerprint。
 - `expect(locator).toHaveScreenshot(name)`：内存基线 + 字节/哈希比对；**不承诺**与官方 CDP 像素一致。
 
+### Page / Locator / expect API 对齐
+
+- 应对齐官方非 Deprecated 的 Page / Locator / LocatorAssertions 方法表面。
+- 依赖 Browser / CDP / Inspector 的方法应存在但抛出明确的 `not supported in-page`（见 `packages/core/src/unsupported.ts`）。
+- 页内可实现的方法优先 DOM / 同 realm 实现；行为不完全等同官方的需在 README 标明降级。
+
 ### `page.goto`
 
 - 页内场景解释为同应用路由 / hash / `location` 导航，而非跨进程打开新浏览器页。

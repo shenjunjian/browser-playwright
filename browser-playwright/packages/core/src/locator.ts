@@ -16,14 +16,22 @@ import {
   checkAction,
   clickElement,
   dblclickElement,
+  dispatchEventAction,
+  dragToAction,
   fillAction,
   focusAction,
   hoverElement,
+  isChecked,
+  isEditableElement,
   pressAction,
   selectOptions,
+  selectTextAction,
+  setInputFilesAction,
+  tapElement,
   typeAction,
   type SelectOption,
 } from "./input/actions";
+import { buildAriaSnapshot } from "./ariaSnapshot";
 import {
   elementMatchesState,
   queryAllInDocument,
@@ -416,6 +424,289 @@ export class Locator {
   async blur(options?: TimeoutOptions): Promise<void> {
     const el = await this.elementHandle(options);
     await blurAction(el);
+  }
+
+  async clear(options?: TimeoutOptions): Promise<void> {
+    const el = await this._waitForActionable(options);
+    if (
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement
+    ) {
+      el.value = "";
+      el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    await this.fill("", options);
+  }
+
+  async pressSequentially(
+    text: string,
+    options?: TimeoutOptions & { delay?: number },
+  ): Promise<void> {
+    await this.type(text, options);
+  }
+
+  async setChecked(
+    checked: boolean,
+    options?: TimeoutOptions,
+  ): Promise<void> {
+    if (checked) await this.check(options);
+    else await this.uncheck(options);
+  }
+
+  async isChecked(options?: TimeoutOptions): Promise<boolean> {
+    const el = await this.elementHandle(options);
+    return isChecked(el);
+  }
+
+  async isEditable(options?: TimeoutOptions): Promise<boolean> {
+    const el = await this.elementHandle(options);
+    return isEditableElement(el);
+  }
+
+  async dispatchEvent(
+    type: string,
+    eventInit?: EventInit,
+    options?: TimeoutOptions,
+  ): Promise<void> {
+    const el = await this.elementHandle(options);
+    await dispatchEventAction(el, type, eventInit);
+  }
+
+  async tap(options?: TimeoutOptions): Promise<void> {
+    const el = await this._waitForActionable(options);
+    await tapElement(this._context.document, el);
+  }
+
+  async selectText(options?: TimeoutOptions): Promise<void> {
+    const el = await this._waitForActionable(options);
+    await selectTextAction(el);
+  }
+
+  async scrollIntoViewIfNeeded(options?: TimeoutOptions): Promise<void> {
+    const el = await this.elementHandle(options);
+    (el as HTMLElement).scrollIntoView?.({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }
+
+  async setInputFiles(
+    files:
+      | string
+      | string[]
+      | { name: string; mimeType: string; buffer: ArrayBuffer | Uint8Array }[]
+      | File[],
+    options?: TimeoutOptions,
+  ): Promise<void> {
+    const el = await this.elementHandle(options);
+    await setInputFilesAction(el, files);
+  }
+
+  async dragTo(target: Locator, options?: TimeoutOptions): Promise<void> {
+    const source = await this._waitForActionable(options);
+    const dest = await target._waitForActionable(options);
+    await dragToAction(this._context.document, source, dest);
+  }
+
+  async drop(
+    _payload: unknown,
+    _options?: TimeoutOptions,
+  ): Promise<void> {
+    // Degraded stub: Playwright drop uses CDP file payloads.
+    throw new Error(
+      "locator.drop() is not fully supported in-page; use dragTo or setInputFiles",
+    );
+  }
+
+  async all(): Promise<Locator[]> {
+    const n = await this.count();
+    return Array.from({ length: n }, (_, i) => this.nth(i));
+  }
+
+  async allInnerTexts(): Promise<string[]> {
+    return this._queryAll().map((el) => (el as HTMLElement).innerText ?? "");
+  }
+
+  async allTextContents(): Promise<string[]> {
+    return this._queryAll().map((el) => el.textContent ?? "");
+  }
+
+  /**
+   * Same-realm evaluateHandle: returns the raw result (no JSHandle wrapper).
+   */
+  async evaluateHandle<R, Arg = unknown>(
+    pageFunction: ((element: Element, arg: Arg) => R | Promise<R>) | string,
+    arg?: Arg,
+    options?: TimeoutOptions,
+  ): Promise<R> {
+    return this.evaluate(pageFunction, arg, options);
+  }
+
+  async waitForFunction<R, Arg = unknown>(
+    pageFunction: ((element: Element, arg: Arg) => R | Promise<R>) | string,
+    arg?: Arg,
+    options?: TimeoutOptions & { polling?: number },
+  ): Promise<R> {
+    const timeout = locTimeout(this._context, options);
+    const interval = options?.polling ?? 100;
+    const deadline = timeout > 0 ? Date.now() + timeout : 0;
+    for (;;) {
+      const el = this._queryAll()[0];
+      if (el) {
+        const value =
+          typeof pageFunction === "string"
+            ? await new Function(
+                "element",
+                "arg",
+                `return (${pageFunction})(element, arg)`,
+              )(el, arg)
+            : await pageFunction(el, arg as Arg);
+        if (value) return value as R;
+      }
+      if (deadline && Date.now() >= deadline)
+        throw new Error(
+          `Timeout ${timeout}ms exceeded waiting for locator.waitForFunction`,
+        );
+      await new Promise((r) => setTimeout(r, interval));
+    }
+  }
+
+  async ariaSnapshot(options?: TimeoutOptions): Promise<string> {
+    const el = await this.elementHandle(options);
+    return buildAriaSnapshot(el);
+  }
+
+  describe(description: string): Locator {
+    return new Locator(
+      this._context,
+      this._selector + " >> internal:describe=" + JSON.stringify(description),
+    );
+  }
+
+  description(): string | null {
+    const marker = "internal:describe=";
+    const idx = this._selector.lastIndexOf(marker);
+    if (idx === -1) return null;
+    const raw = this._selector.slice(idx + marker.length);
+    // Body may be followed by ` >> ...`
+    const end = raw.indexOf(" >> ");
+    const json = end === -1 ? raw : raw.slice(0, end);
+    try {
+      return JSON.parse(json);
+    } catch {
+      return json || null;
+    }
+  }
+
+  /** In-page: return self (no CDP selector resolve). */
+  async normalize(): Promise<Locator> {
+    return this;
+  }
+
+  async highlight(options?: {
+    style?: string | Record<string, string | number>;
+  }): Promise<{ dispose(): void }> {
+    const el = await this.elementHandle();
+    const rect = el.getBoundingClientRect();
+    const doc = this._context.document;
+    const overlay = doc.createElement("x-bp-highlight");
+    const styleObj =
+      typeof options?.style === "object" && options.style
+        ? options.style
+        : undefined;
+    const styleStr =
+      typeof options?.style === "string"
+        ? options.style
+        : styleObj
+          ? Object.entries(styleObj)
+              .map(([k, v]) => `${k}:${v}`)
+              .join(";")
+          : "outline:2px solid #f00;background:rgb(255 0 0 / 15%);";
+    Object.assign(overlay.style, {
+      position: "fixed",
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      pointerEvents: "none",
+      zIndex: "2147483647",
+    });
+    overlay.setAttribute(
+      "style",
+      (overlay.getAttribute("style") || "") + ";" + styleStr,
+    );
+    overlay.dataset.bpHighlight = this._selector;
+    doc.documentElement.appendChild(overlay);
+    return { dispose: () => overlay.remove() };
+  }
+
+  async hideHighlight(): Promise<void> {
+    const doc = this._context.document;
+    for (const node of doc.querySelectorAll("x-bp-highlight")) {
+      if ((node as HTMLElement).dataset.bpHighlight === this._selector)
+        node.remove();
+    }
+  }
+
+  /**
+   * Run a function on the matched element (same-realm; no CDP serialization).
+   * Mirrors Playwright `locator.evaluate`.
+   */
+  async evaluate<R, Arg = unknown>(
+    pageFunction: ((element: Element, arg: Arg) => R | Promise<R>) | string,
+    arg?: Arg,
+    options?: TimeoutOptions,
+  ): Promise<R> {
+    const el = await this.elementHandle(options);
+    if (typeof pageFunction === "string") {
+      const fn = new Function(
+        "element",
+        "arg",
+        `return (${pageFunction})(element, arg)`,
+      );
+      return await fn(el, arg);
+    }
+    return await pageFunction(el, arg as Arg);
+  }
+
+  /**
+   * Run a function on all matched elements (no auto-wait).
+   * Mirrors Playwright `locator.evaluateAll`.
+   */
+  async evaluateAll<R, Arg = unknown>(
+    pageFunction: ((elements: Element[], arg: Arg) => R | Promise<R>) | string,
+    arg?: Arg,
+  ): Promise<R> {
+    const elements = this._queryAll();
+    if (typeof pageFunction === "string") {
+      const fn = new Function(
+        "elements",
+        "arg",
+        `return (${pageFunction})(elements, arg)`,
+      );
+      return await fn(elements, arg);
+    }
+    return await pageFunction(elements, arg as Arg);
+  }
+
+  /**
+   * Element bounding box relative to the viewport (`getBoundingClientRect`).
+   * Returns `null` when the element is not visible.
+   */
+  async boundingBox(
+    options?: TimeoutOptions,
+  ): Promise<{ x: number; y: number; width: number; height: number } | null> {
+    const el = await this.elementHandle(options);
+    if (!isElementVisible(el)) return null;
+    const rect = el.getBoundingClientRect();
+    return {
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+    };
   }
 
   /**

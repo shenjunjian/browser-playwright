@@ -1,5 +1,8 @@
 import { normalizeWhiteSpace } from "../vendor/isomorphic/stringUtils";
-import { getCheckedWithoutMixed } from "../vendor/injected/roleUtils";
+import {
+  getAriaDisabled,
+  getCheckedWithoutMixed,
+} from "../vendor/injected/roleUtils";
 import { resolveKey, splitChord } from "./keyboardLayout";
 import { getInputFor } from "./syntheticInput";
 
@@ -285,6 +288,133 @@ export async function checkAction(
       el.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }
+}
+
+export async function selectTextAction(element: Element): Promise<void> {
+  selectText(element);
+}
+
+export function isEditableElement(element: Element): boolean {
+  const el = retarget(element);
+  if (getAriaDisabled(el)) return false;
+  if (el instanceof HTMLInputElement) {
+    const type = el.type.toLowerCase();
+    if (["hidden", "checkbox", "radio", "file", "button", "submit", "reset", "image"].includes(type))
+      return false;
+    return !el.readOnly && !el.disabled;
+  }
+  if (el instanceof HTMLTextAreaElement)
+    return !el.readOnly && !el.disabled;
+  if (el instanceof HTMLSelectElement) return !el.disabled;
+  if ((el as HTMLElement).isContentEditable) return true;
+  return false;
+}
+
+export async function dispatchEventAction(
+  element: Element,
+  type: string,
+  eventInit: EventInit = {},
+): Promise<void> {
+  const EventCtor =
+    type.startsWith("pointer")
+      ? PointerEvent
+      : type.startsWith("mouse") || type === "click" || type === "dblclick" || type === "contextmenu"
+        ? MouseEvent
+        : type.startsWith("key")
+          ? KeyboardEvent
+          : type.startsWith("drag") || type === "drop"
+            ? DragEvent
+            : type.startsWith("touch")
+              ? (globalThis as any).TouchEvent ?? Event
+              : Event;
+  try {
+    element.dispatchEvent(new EventCtor(type, { bubbles: true, cancelable: true, composed: true, ...eventInit }));
+  } catch {
+    element.dispatchEvent(new Event(type, { bubbles: true, cancelable: true, composed: true, ...eventInit }));
+  }
+}
+
+export async function tapElement(
+  document: Document,
+  element: Element,
+): Promise<void> {
+  // In-page: tap ≈ left click (no real touch CDP).
+  await clickElement(document, element, { button: "left" });
+}
+
+export async function setInputFilesAction(
+  element: Element,
+  files:
+    | string
+    | string[]
+    | { name: string; mimeType: string; buffer: ArrayBuffer | Uint8Array }[]
+    | File[],
+): Promise<void> {
+  const el = retarget(element);
+  if (!(el instanceof HTMLInputElement) || el.type !== "file")
+    throw new Error("Element is not an <input type=file>");
+  if (typeof files === "string" || (Array.isArray(files) && typeof files[0] === "string"))
+    throw new Error(
+      "setInputFiles(path) is not supported in-page; pass File objects or { name, mimeType, buffer }",
+    );
+  const list = Array.isArray(files) ? files : [files];
+  const dataTransfer = new DataTransfer();
+  for (const f of list as any[]) {
+    if (f instanceof File) {
+      dataTransfer.items.add(f);
+      continue;
+    }
+    const buf = f.buffer instanceof Uint8Array ? f.buffer : new Uint8Array(f.buffer);
+    dataTransfer.items.add(
+      new File([buf], f.name, { type: f.mimeType || "application/octet-stream" }),
+    );
+  }
+  el.files = dataTransfer.files;
+  el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+export async function dragToAction(
+  document: Document,
+  source: Element,
+  target: Element,
+): Promise<void> {
+  const input = getInputFor(document);
+  await input.hover(source);
+  // Degraded: mousedown on source, hover+mouseup on target (not full HTML5 DnD).
+  const s = source.getBoundingClientRect();
+  const t = target.getBoundingClientRect();
+  const sx = s.x + s.width / 2;
+  const sy = s.y + s.height / 2;
+  const tx = t.x + t.width / 2;
+  const ty = t.y + t.height / 2;
+  await dispatchEventAction(source, "mousedown", {
+    clientX: sx,
+    clientY: sy,
+    buttons: 1,
+  } as MouseEventInit);
+  await dispatchEventAction(source, "dragstart", {
+    clientX: sx,
+    clientY: sy,
+  } as DragEventInit);
+  await input.hover(target);
+  await dispatchEventAction(target, "dragover", {
+    clientX: tx,
+    clientY: ty,
+  } as DragEventInit);
+  await dispatchEventAction(target, "drop", {
+    clientX: tx,
+    clientY: ty,
+  } as DragEventInit);
+  await dispatchEventAction(target, "mouseup", {
+    clientX: tx,
+    clientY: ty,
+    buttons: 0,
+  } as MouseEventInit);
+  await dispatchEventAction(source, "dragend", {
+    clientX: tx,
+    clientY: ty,
+  } as DragEventInit);
 }
 
 export { isChecked, retarget, focusElement };

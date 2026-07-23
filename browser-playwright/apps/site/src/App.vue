@@ -8,9 +8,9 @@ const demoScript = `import { test, expect } from 'browser-playwright'
 test('弹窗的事件', async ({ page }) => {
   page.on('pageerror', (exception) => expect(exception).toBeNull())
   await page.goto('modal#modal-event')
-  const content = page.locator('.is-message')
-  await page.getByRole('button', { name: '打开带事件弹窗' }).first().click()
-  await expect(content).toHaveText(/show 事件触发了/)
+  const content = page.locator('h1')
+  const box = await content.evaluate(el => el);
+  console.log(box);
 })
 `;
 

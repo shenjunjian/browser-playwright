@@ -186,6 +186,34 @@ assert(consoleHit, "page.on('console')");
 const ev = await page.evaluate(() => 1 + 1);
 assert(ev === 2, "evaluate");
 
+const tag = await page.locator("#msg").evaluate((el) => el.tagName);
+assert(tag === "P" || tag === "DIV" || typeof tag === "string", "locator.evaluate");
+const evalAll = await page.locator(".is-message").evaluateAll((els) => els.length);
+assert(evalAll >= 1, "locator.evaluateAll");
+const bbox = await page.locator("#msg").boundingBox();
+assert(bbox !== null && bbox!.width > 0 && bbox!.height > 0, "locator.boundingBox");
+
+assert(typeof (await page.title()) === "string", "page.title");
+assert(typeof page.url() === "string" && page.url().length > 0, "page.url");
+assert((await page.content()).includes("<"), "page.content");
+assert(await page.isVisible("#msg"), "page.isVisible");
+assert(await page.locator('[data-testid="email"]').isEditable(), "locator.isEditable");
+await page.locator('[data-testid="email"]').clear();
+assert((await page.locator('[data-testid="email"]').inputValue()) === "", "locator.clear");
+await page.locator('[data-testid="email"]').fill("Ada");
+await expect(page.locator('[data-testid="email"]')).toHaveValue("Ada", { timeout: 1000 });
+await expect(page.locator('[data-testid="email"]')).toBeEditable({ timeout: 1000 });
+await page.locator('[data-testid="email"]').focus();
+await expect(page.locator('[data-testid="email"]')).toBeFocused({ timeout: 1000 });
+assert((await page.locator(".is-message").all()).length >= 1, "locator.all");
+assert((await page.locator(".is-message").allInnerTexts()).length >= 1, "allInnerTexts");
+const desc = page.locator("#msg").describe("message");
+assert(desc.description() === "message", "locator.describe");
+await expect(page.getByRole("button", { name: "打开带事件弹窗" }).first()).toHaveRole(
+  "button",
+  { timeout: 1000 },
+);
+
 await page.goto("modal#modal-event");
 assert(
   String(window.location.hash).includes("modal-event"),

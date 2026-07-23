@@ -25,9 +25,29 @@ export class PageEventEmitter {
   private _onError?: (ev: ErrorEvent) => void;
   private _onRejection?: (ev: PromiseRejectionEvent) => void;
   private _window: Window & typeof globalThis;
+  private _consoleMessages: ConsoleMessage[] = [];
+  private _pageErrors: Error[] = [];
 
   constructor(win: Window & typeof globalThis = globalThis as any) {
     this._window = win;
+  }
+
+  consoleMessages(): ConsoleMessage[] {
+    this._ensureInstalled();
+    return this._consoleMessages.slice();
+  }
+
+  pageErrors(): Error[] {
+    this._ensureInstalled();
+    return this._pageErrors.slice();
+  }
+
+  clearConsoleMessages(): void {
+    this._consoleMessages.length = 0;
+  }
+
+  clearPageErrors(): void {
+    this._pageErrors.length = 0;
   }
 
   on<K extends PageEvent>(event: K, handler: Handler<K>): void {
@@ -52,6 +72,11 @@ export class PageEventEmitter {
     this._handlers.get(event)?.delete(handler as Function);
   }
 
+  removeAllListeners(event?: PageEvent): void {
+    if (event) this._handlers.delete(event);
+    else this._handlers.clear();
+  }
+
   private _emit<K extends PageEvent>(event: K, ...args: PageEventMap[K]): void {
     const set = this._handlers.get(event);
     if (!set) return;
@@ -72,11 +97,13 @@ export class PageEventEmitter {
       const orig = this._window.console[level]?.bind(this._window.console);
       this._origConsole[level] = orig;
       this._window.console[level] = (...args: unknown[]) => {
-        this._emit("console", {
+        const msg: ConsoleMessage = {
           type: level,
           text: args.map(String).join(" "),
           args,
-        });
+        };
+        this._consoleMessages.push(msg);
+        this._emit("console", msg);
         orig?.(...args);
       };
     }
@@ -85,6 +112,7 @@ export class PageEventEmitter {
         ev.error instanceof Error
           ? ev.error
           : new Error(ev.message || "Script error");
+      this._pageErrors.push(err);
       this._emit("pageerror", err);
     };
     this._onRejection = (ev: PromiseRejectionEvent) => {
@@ -92,6 +120,7 @@ export class PageEventEmitter {
         ev.reason instanceof Error
           ? ev.reason
           : new Error(String(ev.reason ?? "Unhandled rejection"));
+      this._pageErrors.push(err);
       this._emit("pageerror", err);
     };
     this._window.addEventListener("error", this._onError);
