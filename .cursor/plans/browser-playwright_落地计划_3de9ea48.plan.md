@@ -25,7 +25,7 @@ todos:
     status: completed
   - id: phase7-site-demo
     content: 在 apps/site 接入演示页并验收 README 示例脚本
-    status: pending
+    status: completed
 isProject: false
 ---
 

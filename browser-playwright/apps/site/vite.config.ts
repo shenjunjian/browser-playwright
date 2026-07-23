@@ -4,6 +4,7 @@ import { defineConfig, lazyPlugins } from "vite-plus";
 
 export default defineConfig({
   plugins: lazyPlugins(() => [vue()]),
+  appType: "spa",
   resolve: {
     alias: {
       "browser-playwright": resolve(

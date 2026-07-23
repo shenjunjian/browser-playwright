@@ -79,9 +79,11 @@ export function runScript(
     }
   };
 
+  const shouldStop = () => stopped || mode === "stop";
+
   const bridge: Bridge = {
     async checkpoint(line: number) {
-      if (mode === "stop" || stopped) throw new RunScriptStoppedError();
+      if (shouldStop()) throw new RunScriptStoppedError();
 
       if (lastLine !== undefined && lastLine !== line) {
         emit({ line: lastLine, status: "passed" });
@@ -89,7 +91,7 @@ export function runScript(
       lastLine = line;
 
       while (true) {
-        if (mode === "stop" || stopped) throw new RunScriptStoppedError();
+        if (shouldStop()) throw new RunScriptStoppedError();
         if (mode === "play") break;
         if (stepCredits > 0) {
           stepCredits--;
@@ -99,7 +101,7 @@ export function runScript(
         await waitForContinue();
       }
 
-      if (mode === "stop" || stopped) throw new RunScriptStoppedError();
+      if (shouldStop()) throw new RunScriptStoppedError();
       emit({ line, status: "running" });
     },
   };
@@ -144,7 +146,7 @@ export function runScript(
     try {
       await run(testProxy, expect, page, bridge);
 
-      if (mode === "stop" || stopped) {
+      if (shouldStop()) {
         markFailed(new RunScriptStoppedError());
         return emptyResult();
       }

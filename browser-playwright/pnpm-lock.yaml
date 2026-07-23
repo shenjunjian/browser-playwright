@@ -256,6 +256,12 @@ importers:
       '@vue/tsconfig':
         specifier: ^0.9.1
         version: 0.9.1(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3))
+      happy-dom:
+        specifier: 'catalog:'
+        version: 20.11.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.1
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

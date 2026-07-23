@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vp dev",
     "build": "vue-tsc -b && vp build",
-    "preview": "vp preview"
+    "preview": "vp preview",
+    "accept": "tsx scripts/accept.mts"
   },
   "dependencies": {
     "browser-playwright": "workspace:*",
@@ -17,6 +18,8 @@
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/tsconfig": "^0.9.1",
+    "happy-dom": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",
