@@ -25,8 +25,11 @@ export interface StepEvent {
 }
 
 export interface RunScriptOptions {
+  /** When true, start in play mode; default is paused until `play()` / `step()`. */
   autoPlay?: boolean;
   onStep?: (event: StepEvent) => void;
+  /** Bind script `page` fixture; defaults to `createPage()`. */
+  page?: Page;
 }
 
 export interface RunScriptController {

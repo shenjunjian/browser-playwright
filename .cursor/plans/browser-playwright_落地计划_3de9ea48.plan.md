@@ -19,7 +19,7 @@ todos:
     status: completed
   - id: phase5-runscript
     content: 实现无框架 runScript 步进执行与播放控制 API
-    status: pending
+    status: completed
   - id: phase6-vue-ui
     content: 实现 browser-playwright-vue 浮动调试组件
     status: pending
@@ -46,7 +46,7 @@ isProject: false
 | [`packages/browser-playwright-vue`](browser-playwright/packages/browser-playwright-vue) | 浮动调试 UI，驱动 `runScript` 有参考图 | `browser-playwright-vue` |
 | [`apps/site`](browser-playwright/apps/site) | 演示页 + 嵌入 Vue 调试组件跑示例脚本 | 内部测试工程 |
 
-browser-playwright-vue组件参考图： ![browser-playwright-vue.png](./browser-playwright-vue.png)
+browser-playwright-vue组件参考图： ![browser-playwright-vue.png](./browser-playwright-vue.png)， 色调以 #1476ff 为主色。
 
 ## 架构
 

@@ -91,6 +91,7 @@ const {
   expect,
   test,
   runTests,
+  runScript,
   _resetTests,
   clearScreenshotBaselines,
   hashBytes,
@@ -246,5 +247,86 @@ await expect(page.locator("#msg")).toHaveScreenshot("msg-baseline", {
   timeout: 2000,
 });
 
-console.log("Phase 1–4 smoke OK");
+// —— Phase 5: runScript play / step / events ——
+_resetTests();
+document.getElementById("msg")!.textContent = "idle";
+
+const script = `
+import { test, expect } from 'browser-playwright'
+
+test('弹窗的事件', async ({ page }) => {
+  const content = page.locator('#msg')
+  await page.getByRole('button', { name: '打开带事件弹窗' }).first().click()
+  await expect(content).toHaveText(/show 事件触发了/)
+})
+`;
+
+const steps: Array<{ line: number; status: string }> = [];
+const ctrl = runScript(script, {
+  page,
+  autoPlay: true,
+  onStep: (e) => steps.push({ line: e.line, status: e.status }),
+});
+const scriptResult = await ctrl.result;
+assert(scriptResult.passed === 1, `runScript passed got ${JSON.stringify(scriptResult)}`);
+assert(scriptResult.failed === 0, `runScript failed got ${JSON.stringify(scriptResult)}`);
+assert(steps.some((s) => s.status === "running"), "runScript emitted running steps");
+assert(steps.some((s) => s.status === "passed"), "runScript emitted passed steps");
+
+// step / pause control
+_resetTests();
+document.getElementById("msg")!.textContent = "idle";
+const stepEvents: string[] = [];
+const ctrl2 = runScript(
+  `
+test('step-demo', async ({ page }) => {
+  await page.getByRole('button', { name: '打开带事件弹窗' }).first().click()
+  await expect(page.locator('#msg')).toHaveText(/show/)
+})
+`,
+  {
+    page,
+    autoPlay: false,
+    onStep: (e) => stepEvents.push(`${e.line}:${e.status}`),
+  },
+);
+
+// Allow microtasks to reach first checkpoint
+await new Promise((r) => setTimeout(r, 20));
+assert(
+  stepEvents.some((e) => e.endsWith(":paused")),
+  `expected paused before play, got ${stepEvents.join("|")}`,
+);
+ctrl2.play();
+const r2 = await ctrl2.result;
+assert(r2.passed === 1, `step-demo play got ${JSON.stringify(r2)}`);
+
+// single-step then stop
+_resetTests();
+document.getElementById("msg")!.textContent = "idle";
+let pausedCount = 0;
+const ctrl3 = runScript(
+  `
+test('stop-demo', async ({ page }) => {
+  await page.getByRole('button', { name: '打开带事件弹窗' }).first().click()
+  await expect(page.locator('#msg')).toHaveText(/show/)
+})
+`,
+  {
+    page,
+    autoPlay: false,
+    onStep: (e) => {
+      if (e.status === "paused") pausedCount++;
+    },
+  },
+);
+await new Promise((r) => setTimeout(r, 20));
+ctrl3.step(); // advance past registration checkpoint(s)
+await new Promise((r) => setTimeout(r, 30));
+ctrl3.stop();
+const r3 = await ctrl3.result;
+assert(pausedCount >= 1, "stop-demo saw paused");
+assert(typeof r3.passed === "number", "stop-demo returns TestResult");
+
+console.log("Phase 1–5 smoke OK");
 window.close();
