@@ -2,7 +2,8 @@ export type TimeoutOptions = {
   timeout?: number;
 };
 
-export const DEFAULT_TIMEOUT = 30_000;
+// 默认超时修改为 5秒
+export const DEFAULT_TIMEOUT = 5_000;
 
 export function resolveTimeout(
   options?: TimeoutOptions,

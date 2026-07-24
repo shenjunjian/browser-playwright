@@ -1,24 +1,43 @@
-# browser-playwright（core）
+# browser-playwright 
 
-在**当前页面**内运行的 Playwright 风格自动化库。发布名为 `browser-playwright`，无框架依赖，可直接嵌入 Vue / React 等前端工程，也可配合 `runScript` 做页内逐步调试。
+在**浏览器页面**内运行的 Playwright 脚本的自动化库 ，无框架依赖，可直接嵌入任意 Vue / React 等前端工程，也可配合 `runScript` 做页内逐步调试。
 
 ## 目的
 
-官方 Playwright 在 Node.js 中通过 CDP 操控浏览器。本包把常用的 **Page / Locator / expect / test** 搬到浏览器里执行，让既有 Playwright 风格脚本可以在页面上跑：
+官方 Playwright 在 Node.js 中通过 CDP 操控浏览器。本包把常用的 **Page / Locator / expect / test** 搬到浏览器里执行，让既有 Playwright 脚本可以在页面上跑。
+
+## 快速上手
+
+它支持在浏览器运行playwright的脚本，请参考[playwright API](https://playwright.dev/docs/api/class-playwright)。
 
 ```ts
 import { test, expect } from 'browser-playwright'
 
 test('弹窗的事件', async ({ page }) => {
-  page.on('pageerror', (exception) => expect(exception).toBeNull())
-  await page.goto('modal#modal-event')
   const content = page.locator('.is-message')
-  await page.getByRole('button', { name: '打开带事件弹窗' }).first().click()
-  await expect(content).toHaveText(/show 事件触发了/)
+  await page.getByRole('button', { name: '点击我' }).click()
+  await expect(content).toHaveText(/点击事件触发了/)
 })
 ```
 
-设计目标：
+`browser-playwright 库`移除了`chromium.launch` / `Browser` / `BrowserServer`等对象，且不支持配置playwright那一套东西了。 Page对象即当前执行的页面对象，它就是顶层对象了。 
+
+库的默认超时时间统一修改为 `5秒`，你可以自定义超时时间：
+
+```ts
+// page的操作超时，可以通过初始化设置，也可以调用 setDefaultTimeout 设置
+const page = createPage({ timeout: 1000 });
+page.setDefaultTimeout(1000)
+
+// expect的等待超时,通过方法的最后一个参数ExpectOptions 来设置
+await expect(locator).toHaveCount(1, { timeout: 1000 });
+
+```
+
+`browser-playwright 库` 增加了 runScript 函数，它无框架依赖：接收Playwright脚本后，按语句边界步进，并暴露播放控制。详见底部的 runScript 小节。如果你需要在Vue的前端项目中运行Playwright脚本，
+可以安装 `browser-playwright-vue`, 它暴露一个`BrowserPlaywrightDebugger`组件，可以直接集成在页面。详见： [browser-playwright-vue](https://www.npmjs.com/package/browser-playwright-vue)
+
+## 设计目标：
 
 | 目标 | 说明 |
 |------|------|
@@ -28,28 +47,6 @@ test('弹窗的事件', async ({ page }) => {
 | Role 查询 | 基于 DOM / ARIA 计算，移植官方页内选择器实现 |
 | 真实定时器 | 使用 `setTimeout` 等，不模拟 Clock |
 | 可嵌入 | 配合 `runScript` 或 Vue 调试组件，在业务页里跑测试脚本 |
-
-## 安装与构建
-
-在 monorepo 内：
-
-```bash
-cd browser-playwright
-pnpm install
-pnpm --filter browser-playwright build
-```
-
-产物：`dist/browser-playwright.js` + `dist/index.d.ts`。
-
-```ts
-import {
-  test,
-  expect,
-  runScript,
-  createPage,
-  // …
-} from 'browser-playwright'
-```
 
 ## 与 Playwright 官方 API 的差异
 
@@ -85,7 +82,7 @@ import {
 
 ### 显式不支持（调用即抛错）
 
-依赖 Browser / CDP / Inspector 的 API 已挂在 `Page` 上，但会抛出 `not supported in-page`：
+依赖 Browser / CDP / Inspector 的 API 已挂在 `Page` 上，但会抛出 `not supported in-page`， page上的许多方案，官方已标记为`废弃`,统一没有适配：
 
 `page.$` / `$$` / `$eval` / `$$eval`、`context`、`opener`、`bringToFront`、`pdf`、`video`、`workers`、`pause`、`pickLocator`、`cancelPickLocator`、`requestGC`、`requests`、`routeFromHAR`、`routeWebSocket`、`setExtraHTTPHeaders`、`addLocatorHandler`、`removeLocatorHandler`、`exposeBinding`、`waitForRequest`、`waitForResponse`。
 

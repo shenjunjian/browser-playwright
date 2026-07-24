@@ -1,6 +1,15 @@
 {
   "name": "browser-playwright-vue",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "description": "browser-playwright-vue is a component that allows you to run playwright scripts in the browser.",
+  "keywords": [
+    "browser-playwright",
+    "browser",
+    "testing",
+    "automation",
+    "vue"
+  ],
+  "author": "browser-playwright-vue",
   "private": false,
   "type": "module",
   "exports": {

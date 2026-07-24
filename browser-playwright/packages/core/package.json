@@ -1,7 +1,16 @@
 {
   "name": "browser-playwright",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
+  "description": "browser-playwright is a library that allows you to run playwright scripts in the browser.",
+  "keywords": [
+    "playwright",
+    "browser",
+    "testing",
+    "automation"
+  ],
+  "author": "browser-playwright",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
