@@ -59,6 +59,44 @@ const lines = computed(() =>
   scriptText.value.replace(/\r\n/g, "\n").split("\n"),
 );
 
+const KEYWORDS = new Set(
+  "import from export const let var function async await return if else for while new class extends typeof true false null undefined try catch throw of in".split(
+    " ",
+  ),
+);
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** Lightweight per-line JS/TS highlighter for the read-only preview. */
+function highlightLine(line: string): string {
+  if (!line) return " ";
+  const re =
+    /(\/\/.*$)|('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`)|(\b\d+\.?\d*\b)|(\b[A-Za-z_$][\w$]*\b)|([^\s\w]+)|(\s+)/g;
+  let out = "";
+  for (const m of line.matchAll(re)) {
+    const [tok, comment, str, num, ident, punct, space] = m;
+    const esc = escapeHtml(tok);
+    if (comment) out += `<span class="tok-comment">${esc}</span>`;
+    else if (str) out += `<span class="tok-string">${esc}</span>`;
+    else if (num) out += `<span class="tok-number">${esc}</span>`;
+    else if (ident) {
+      const cls = KEYWORDS.has(tok)
+        ? "tok-keyword"
+        : /^[A-Z]/.test(tok)
+          ? "tok-type"
+          : "tok-ident";
+      out += `<span class="${cls}">${esc}</span>`;
+    } else if (punct) out += `<span class="tok-punct">${esc}</span>`;
+    else out += space ?? esc;
+  }
+  return out || " ";
+}
+
 const currentStatement = computed(() => {
   if (recording.value) {
     if (assertMode.value) return `Recording · Assert (${assertKind.value})`;
@@ -404,7 +442,7 @@ onBeforeUnmount(() => {
               :class="lineClass(idx + 1)"
             >
               <span class="bpw-gutter">{{ idx + 1 }}</span>
-              <code class="bpw-code-text">{{ line || " " }}</code>
+              <code class="bpw-code-text" v-html="highlightLine(line)"></code>
             </div>
           </div>
 
@@ -735,6 +773,36 @@ onBeforeUnmount(() => {
   color: var(--bpw-text);
   font: inherit;
   text-overflow: ellipsis;
+}
+
+/* v-html tokens need :deep — scoped attrs are not on injected spans */
+.bpw-code-text :deep(.tok-keyword) {
+  color: #c678dd;
+}
+
+.bpw-code-text :deep(.tok-string) {
+  color: #98c379;
+}
+
+.bpw-code-text :deep(.tok-number) {
+  color: #d19a66;
+}
+
+.bpw-code-text :deep(.tok-comment) {
+  color: #6b7385;
+  font-style: italic;
+}
+
+.bpw-code-text :deep(.tok-type) {
+  color: #e5c07b;
+}
+
+.bpw-code-text :deep(.tok-punct) {
+  color: #56b6c2;
+}
+
+.bpw-code-text :deep(.tok-ident) {
+  color: #abb2bf;
 }
 
 .bpw-meta {
