@@ -17,6 +17,13 @@ export {
   hashBytes,
   clearScreenshotBaselines,
 } from "./screenshot";
+export {
+  startRecording,
+  generateLocator,
+  generateScript,
+  actionToStatement,
+  resolveTargetElement,
+} from "./recorder";
 export type { ByRoleOptions, ExactOptions, LocatorOptions } from "./locator";
 export type { PageOptions, ConsoleMessage } from "./page";
 export type {
@@ -35,3 +42,9 @@ export type {
   TestInfo,
   TestResult,
 } from "./types";
+export type {
+  RecordedAction,
+  RecorderOptions,
+  RecorderController,
+  AssertKind,
+} from "./recorder";

@@ -1,6 +1,6 @@
 # browser-playwright 
 
-在**浏览器页面**内运行的 Playwright 脚本的自动化库 ，无框架依赖，可直接嵌入任意 Vue / React 等前端工程，也可配合 `runScript` 做页内逐步调试。
+在**浏览器页面**内运行的 Playwright 脚本的自动化库 ，无框架依赖，可直接嵌入任意 Vue / React 等前端工程，也可配合 `runScript` 做页内逐步调试，或用 `startRecording` 录制操作生成脚本。
 
 ## 目的
 
@@ -112,6 +112,8 @@ await expect(locator).toHaveCount(1, { timeout: 1000 });
 | `getLastTestResult` | 最近一次 `runTests` 结果 |
 | `_resetTests` | 清空注册表（内部 / smoke 用） |
 | `runScript` | 按字符串脚本步进执行，带播放控制 |
+| `startRecording` | 页内录制用户操作，生成 `test(...)` 脚本 |
+| `generateLocator` / `generateScript` | 从 Element / 动作列表生成定位器与脚本 |
 | `Page` | 页面类 |
 | `createPage` | 创建绑定当前文档的 `Page` |
 | `Locator` | 定位器类 |
@@ -123,7 +125,7 @@ await expect(locator).toHaveCount(1, { timeout: 1000 });
 
 ### 类型
 
-`ByRoleOptions`、`ExactOptions`、`LocatorOptions`、`PageOptions`、`ConsoleMessage`、`URLMatch`、`RouteHandlerCallback`、`RouteFulfillOptions`、`RouteContinueOptions`、`RouteHeaders`、`ScreenshotOptions`、`RunScriptController`、`RunScriptOptions`、`StepEvent`、`TestFixtures`、`TestInfo`、`TestResult`。
+`ByRoleOptions`、`ExactOptions`、`LocatorOptions`、`PageOptions`、`ConsoleMessage`、`URLMatch`、`RouteHandlerCallback`、`RouteFulfillOptions`、`RouteContinueOptions`、`RouteHeaders`、`ScreenshotOptions`、`RunScriptController`、`RunScriptOptions`、`StepEvent`、`TestFixtures`、`TestInfo`、`TestResult`、`RecordedAction`、`RecorderOptions`、`RecorderController`、`AssertKind`。
 
 ---
 
@@ -329,6 +331,61 @@ console.log(result.passed, result.failed)
 
 若脚本未调用 `test()`，整段脚本会作为单个 `(script)` 用例汇总结果。
 
+### 录制 / Recorder
+
+页内等价于官方 `codegen`：在当前文档捕获**真实用户操作**（`isTrusted`），生成可直接交给 `runScript` 的脚本。不依赖 Node / CDP。
+
+```ts
+import { startRecording, runScript } from 'browser-playwright'
+
+const rec = startRecording({
+  testTitle: '弹窗流程',
+  onUpdate: (script) => console.log(script),
+})
+
+// 用户在页面上点击 / 输入 …
+// 悬停时会高亮元素并显示候选 locator
+
+rec.setAssertMode(true)              // 下次点击 → expect(...).toBeVisible()
+rec.setAssertMode(true, 'toHaveText') // 或 toHaveText
+
+rec.pause()
+rec.resume()
+
+const { script, actions } = rec.stop()
+await runScript(script, { autoPlay: true }).result
+```
+
+生成形态固定为：
+
+```ts
+import { test, expect } from 'browser-playwright'
+
+test('弹窗流程', async ({ page }) => {
+  await page.getByRole('button', { name: '打开带事件弹窗' }).click()
+  await expect(page.getByTestId('modal-message')).toBeVisible()
+})
+```
+
+| 能力 | 说明 |
+|------|------|
+| 动作 | click / dblclick / fill（防抖合并）/ selectOption / check / uncheck / press(Enter\|Tab\|Escape) |
+| 断言模式 | `setAssertMode(true)` 后点击生成 `expect` |
+| Locator | 优先 role → testid → label/placeholder → text → CSS |
+| 忽略 UI | `[data-bpw-ui]` 及其子树不录制（调试面板自带） |
+| 与官方差异 | 无 CLI；无跨标签页；合成回放事件仍为 `isTrusted=false` |
+
+也可单独使用：
+
+```ts
+import { generateLocator, generateScript } from 'browser-playwright'
+
+const locator = generateLocator(document.querySelector('button')!)
+const script = generateScript([{ kind: 'click', locator }])
+```
+
+Vue 场景请用 `browser-playwright-vue` 的 Record / Assert / 编辑面板。
+
 ### 网络：`Route` / `Request`
 
 ```ts
@@ -377,8 +434,8 @@ clearScreenshotBaselines() // 清空 toHaveScreenshot 内存基线
 
 | 包 | 职责 |
 |----|------|
-| `browser-playwright`（本包） | 页内 API + `runScript` |
-| `browser-playwright-vue` | 浮动调试 UI，驱动 `runScript` |
+| `browser-playwright`（本包） | 页内 API + `runScript` + `startRecording` |
+| `browser-playwright-vue` | 浮动 Inspector（录制 / 编辑 / 回放） |
 | `apps/site` | monorepo 内演示与验收 |
 
 更多仓库约定见仓库根目录 [`AGENT.md`](../../../AGENT.md)。

@@ -2,17 +2,14 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { BrowserPlaywrightDebugger } from "browser-playwright-vue";
 
-/** README 同类验收脚本：getByRole → click → toHaveText */
-const demoScript = `import { test, expect } from 'browser-playwright'
+/** 初始骨架；可用面板 Record 录制操作，或编辑后回放 */
+const demoScript = ref(`import { test, expect } from 'browser-playwright'
 
 test('弹窗的事件', async ({ page }) => {
-  page.on('pageerror', (exception) => expect(exception).toBeNull())
-  await page.goto('modal#modal-event')
-  const content = page.locator('h1')
-  const box = await content.evaluate(el => el);
-  console.log(box);
+  await page.getByRole('button', { name: '打开带事件弹窗' }).click()
+  await expect(page.getByTestId('modal-message')).toHaveText('show 事件触发了')
 })
-`;
+`);
 
 const hash = ref(
   typeof location !== "undefined" ? location.hash.replace(/^#/, "") : "",
@@ -36,7 +33,6 @@ function syncHash() {
 
 function openModal() {
   modalOpen.value = true;
-  // 对齐 README 断言文案：弹窗 show 事件触发后写入消息区
   message.value = "show 事件触发了";
 }
 
@@ -61,7 +57,8 @@ onUnmounted(() => {
     <header class="site__header">
       <h1>browser-playwright</h1>
       <p>
-        演示页：按钮 / 弹窗 / 文案 + 浮动调试组件，验收 README 脚本
+        演示页：按钮 / 弹窗 / 文案 + 浮动 Inspector。可
+        <strong>Record</strong> 录制操作生成脚本，或播放下方验收脚本
         <code>getByRole → click → toHaveText</code>。
       </p>
       <p class="site__route">
@@ -109,7 +106,7 @@ onUnmounted(() => {
     </section>
   </main>
 
-  <BrowserPlaywrightDebugger :script="demoScript" />
+  <BrowserPlaywrightDebugger v-model:script="demoScript" />
 </template>
 
 <style scoped>

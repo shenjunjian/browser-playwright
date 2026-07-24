@@ -2,23 +2,40 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import {
   runScript,
+  startRecording,
+  type AssertKind,
+  type RecorderController,
   type RunScriptController,
   type StepEvent,
   type TestInfo,
   type TestResult,
 } from "browser-playwright";
 
+const EMPTY_SCRIPT = `import { test, expect } from 'browser-playwright'
+
+test('recorded', async ({ page }) => {
+})
+`;
+
 const props = withDefaults(
   defineProps<{
-    script: string;
+    /** Initial script. Editable locally; emit `update:script` on change. */
+    script?: string;
     autoPlay?: boolean;
   }>(),
   {
+    script: "",
     autoPlay: false,
   },
 );
 
+const emit = defineEmits<{
+  "update:script": [value: string];
+}>();
+
 const expanded = ref(false);
+const editing = ref(false);
+const scriptText = ref(props.script || EMPTY_SCRIPT);
 const currentLine = ref<number | null>(null);
 const stepStatus = ref<StepEvent["status"] | "idle" | "done">("idle");
 const stepMessage = ref<string | undefined>();
@@ -28,15 +45,25 @@ const result = ref<TestResult | null>(null);
 const assertions = ref<
   Array<{ line: number; status: "passed" | "failed"; message?: string }>
 >([]);
+const recording = ref(false);
+const assertMode = ref(false);
+const assertKind = ref<AssertKind>("toBeVisible");
 
 const lineRefs = ref<Record<number, HTMLElement | null>>({});
 
 let controller: RunScriptController | null = null;
+let recorder: RecorderController | null = null;
 let runToken = 0;
 
-const lines = computed(() => props.script.replace(/\r\n/g, "\n").split("\n"));
+const lines = computed(() =>
+  scriptText.value.replace(/\r\n/g, "\n").split("\n"),
+);
 
 const currentStatement = computed(() => {
+  if (recording.value) {
+    if (assertMode.value) return `Recording · Assert (${assertKind.value})`;
+    return "Recording…";
+  }
   if (finished.value && result.value) {
     const { passed, failed } = result.value;
     if (failed > 0) return `Failed · ${passed} passed, ${failed} failed`;
@@ -46,7 +73,8 @@ const currentStatement = computed(() => {
     if (stepStatus.value === "idle") return "Ready";
     return "…";
   }
-  const text = lines.value[currentLine.value - 1]?.trim() || `Line ${currentLine.value}`;
+  const text =
+    lines.value[currentLine.value - 1]?.trim() || `Line ${currentLine.value}`;
   if (stepStatus.value === "paused") return `Paused · ${text}`;
   if (stepStatus.value === "failed")
     return `Failed · ${stepMessage.value || text}`;
@@ -55,6 +83,7 @@ const currentStatement = computed(() => {
 });
 
 const statusTone = computed(() => {
+  if (recording.value) return "recording";
   if (finished.value && result.value) {
     return result.value.failed > 0 ? "failed" : "passed";
   }
@@ -86,6 +115,11 @@ async function scrollToCurrentLine() {
   el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
+function syncScript(next: string) {
+  scriptText.value = next;
+  emit("update:script", next);
+}
+
 function onStep(event: StepEvent) {
   currentLine.value = event.line;
   stepStatus.value = event.status;
@@ -106,7 +140,7 @@ function onStep(event: StepEvent) {
     playing.value = false;
   }
 
-  if (expanded.value) void scrollToCurrentLine();
+  if (expanded.value && !editing.value) void scrollToCurrentLine();
 }
 
 function stopController() {
@@ -118,7 +152,21 @@ function stopController() {
   controller = null;
 }
 
+function stopRecorder() {
+  if (!recorder) return;
+  try {
+    const { script } = recorder.stop();
+    syncScript(script);
+  } catch {
+    // ignore
+  }
+  recorder = null;
+  recording.value = false;
+  assertMode.value = false;
+}
+
 function startRun() {
+  if (recording.value) return;
   stopController();
   const token = ++runToken;
 
@@ -129,8 +177,9 @@ function startRun() {
   finished.value = false;
   result.value = null;
   assertions.value = [];
+  editing.value = false;
 
-  const ctrl = runScript(props.script, {
+  const ctrl = runScript(scriptText.value, {
     autoPlay: props.autoPlay,
     onStep,
   });
@@ -149,9 +198,9 @@ function startRun() {
 }
 
 function onPlay() {
+  if (recording.value) stopRecorder();
   if (finished.value || !controller) {
     startRun();
-    // autoPlay false by default; kick play after recreate
     queueMicrotask(() => controller?.play());
     return;
   }
@@ -160,11 +209,16 @@ function onPlay() {
 }
 
 function onPause() {
+  if (recording.value) {
+    recorder?.pause();
+    return;
+  }
   controller?.pause();
   playing.value = false;
 }
 
 function onStepOnce() {
+  if (recording.value) stopRecorder();
   if (finished.value || !controller) {
     startRun();
     queueMicrotask(() => controller?.step());
@@ -174,6 +228,12 @@ function onStepOnce() {
 }
 
 function onStop() {
+  if (recording.value) {
+    stopRecorder();
+    stepStatus.value = "idle";
+    finished.value = false;
+    return;
+  }
   stopController();
   playing.value = false;
   stepStatus.value = "idle";
@@ -183,9 +243,55 @@ function onStop() {
   }
 }
 
+function toggleRecord() {
+  if (recording.value) {
+    stopRecorder();
+    expanded.value = true;
+    return;
+  }
+  stopController();
+  playing.value = false;
+  finished.value = false;
+  result.value = null;
+  assertions.value = [];
+  currentLine.value = null;
+  stepStatus.value = "idle";
+  expanded.value = true;
+  editing.value = false;
+
+  recorder = startRecording({
+    testTitle: "recorded",
+    onUpdate: (script) => {
+      syncScript(script);
+    },
+  });
+  recording.value = true;
+  if (assertMode.value) {
+    recorder.setAssertMode(true, assertKind.value);
+  }
+}
+
+function toggleAssert() {
+  if (!recording.value) return;
+  assertMode.value = !assertMode.value;
+  recorder?.setAssertMode(assertMode.value, assertKind.value);
+}
+
+function cycleAssertKind() {
+  if (!recording.value || !assertMode.value) return;
+  assertKind.value =
+    assertKind.value === "toBeVisible" ? "toHaveText" : "toBeVisible";
+  recorder?.setAssertMode(true, assertKind.value);
+}
+
 function toggleExpand() {
   expanded.value = !expanded.value;
-  if (expanded.value) void scrollToCurrentLine();
+  if (expanded.value && !editing.value) void scrollToCurrentLine();
+}
+
+function onEditorInput(event: Event) {
+  const el = event.target as HTMLTextAreaElement;
+  syncScript(el.value);
 }
 
 function lineClass(lineNo: number) {
@@ -200,7 +306,11 @@ function lineClass(lineNo: number) {
   };
 }
 
-function assertionLabel(a: { line: number; status: string; message?: string }) {
+function assertionLabel(a: {
+  line: number;
+  status: string;
+  message?: string;
+}) {
   const base = `L${a.line} ${a.status}`;
   return a.message ? `${base}: ${a.message}` : base;
 }
@@ -211,16 +321,35 @@ function testStatusLabel(t: TestInfo) {
 }
 
 watch(
-  () => [props.script, props.autoPlay] as const,
-  () => {
-    startRun();
+  () => props.script,
+  (next) => {
+    if (next == null || next === scriptText.value) return;
+    scriptText.value = next || EMPTY_SCRIPT;
+    if (!recording.value) startRun();
   },
-  { immediate: true },
 );
+
+watch(
+  () => props.autoPlay,
+  () => {
+    if (!recording.value) startRun();
+  },
+);
+
+// Initial run (playback ready, not auto unless autoPlay)
+startRun();
 
 onBeforeUnmount(() => {
   runToken++;
   stopController();
+  if (recorder) {
+    try {
+      recorder.stop();
+    } catch {
+      // ignore
+    }
+    recorder = null;
+  }
 });
 </script>
 
@@ -228,12 +357,46 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       class="bpw-root"
+      data-bpw-ui
       role="complementary"
-      aria-label="browser-playwright debugger"
+      aria-label="browser-playwright inspector"
     >
       <div class="bpw-shell" :class="{ 'bpw-shell--expanded': expanded }">
-        <div v-if="expanded" class="bpw-panel">
-          <div class="bpw-code" aria-label="source">
+        <div v-if="expanded" class="bpw-panel" :data-recording="recording ? 'true' : 'false'">
+          <div class="bpw-panel-toolbar">
+            <button
+              type="button"
+              class="bpw-chip"
+              :class="{ 'bpw-chip--active': !editing }"
+              title="查看高亮源码"
+              @click="editing = false"
+            >
+              预览
+            </button>
+            <button
+              type="button"
+              class="bpw-chip"
+              :class="{ 'bpw-chip--active': editing }"
+              title="编辑脚本"
+              @click="editing = true"
+            >
+              编辑
+            </button>
+            <span v-if="recording" class="bpw-rec-hint">
+              悬停预览 locator · 点击录制操作
+            </span>
+          </div>
+
+          <textarea
+            v-if="editing"
+            class="bpw-editor"
+            :value="scriptText"
+            spellcheck="false"
+            aria-label="editable script"
+            @input="onEditorInput"
+          />
+
+          <div v-else class="bpw-code" aria-label="source">
             <div
               v-for="(line, idx) in lines"
               :key="idx"
@@ -288,21 +451,60 @@ onBeforeUnmount(() => {
             class="bpw-status"
             :data-tone="statusTone"
             :title="expanded ? '收起源码' : '展开源码'"
+            :aria-label="expanded ? '收起源码' : '展开源码'"
             @click="toggleExpand"
           >
             <span class="bpw-dot" aria-hidden="true" />
-            <span class="bpw-status-text">{{ currentStatement }}</span>
+            <!-- aria-hidden: avoid script text becoming this button's accessible name
+                 and colliding with page.getByRole({ name }) during playback -->
+            <span class="bpw-status-text" aria-hidden="true">{{
+              currentStatement
+            }}</span>
             <span class="bpw-chevron" aria-hidden="true">{{
               expanded ? "▾" : "▴"
             }}</span>
           </button>
 
-          <div class="bpw-actions" role="toolbar" aria-label="playback controls">
+          <div class="bpw-actions" role="toolbar" aria-label="inspector controls">
+            <button
+              type="button"
+              class="bpw-btn bpw-btn--record"
+              :class="{ 'bpw-btn--rec-on': recording }"
+              :title="recording ? '停止录制' : '开始录制'"
+              :aria-label="recording ? '停止录制' : '开始录制'"
+              :aria-pressed="recording"
+              @click="toggleRecord"
+            >
+              <span class="bpw-rec-dot" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class="bpw-btn bpw-btn--ghost"
+              :class="{ 'bpw-btn--assert-on': assertMode && recording }"
+              title="断言模式（录制时点击元素生成 expect）"
+              aria-label="断言模式"
+              :disabled="!recording"
+              :aria-pressed="assertMode"
+              @click="toggleAssert"
+            >
+              ∃
+            </button>
+            <button
+              type="button"
+              class="bpw-btn bpw-btn--ghost bpw-btn--kind"
+              title="切换断言类型 toBeVisible / toHaveText"
+              aria-label="切换断言类型"
+              :disabled="!recording || !assertMode"
+              @click="cycleAssertKind"
+            >
+              {{ assertKind === "toBeVisible" ? "vis" : "txt" }}
+            </button>
             <button
               type="button"
               class="bpw-btn"
               title="播放"
               aria-label="播放"
+              :disabled="recording"
               @click="onPlay"
             >
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -325,6 +527,7 @@ onBeforeUnmount(() => {
               class="bpw-btn"
               title="单步"
               aria-label="单步"
+              :disabled="recording"
               @click="onStepOnce"
             >
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -342,7 +545,14 @@ onBeforeUnmount(() => {
               @click="onStop"
             >
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-                <rect fill="currentColor" x="3.5" y="3.5" width="9" height="9" rx="1" />
+                <rect
+                  fill="currentColor"
+                  x="3.5"
+                  y="3.5"
+                  width="9"
+                  height="9"
+                  rx="1"
+                />
               </svg>
             </button>
           </div>
@@ -364,6 +574,7 @@ onBeforeUnmount(() => {
   --bpw-failed: #ff5d5d;
   --bpw-paused: #f5c542;
   --bpw-running: var(--bpw-primary);
+  --bpw-record: #e11d48;
   --bpw-glow: 0 0 24px rgb(20 118 255 / 35%), 0 8px 28px rgb(0 0 0 / 45%);
 
   position: fixed;
@@ -396,13 +607,76 @@ onBeforeUnmount(() => {
 .bpw-panel {
   display: flex;
   flex-direction: column;
-  max-height: min(420px, calc(100vh - 120px));
+  max-height: min(460px, calc(100vh - 120px));
   margin-bottom: 10px;
   overflow: hidden;
   border: 1px solid var(--bpw-border);
   border-radius: 14px;
   background: var(--bpw-bg);
   box-shadow: inset 3px 0 0 var(--bpw-passed);
+}
+
+.bpw-panel[data-recording="true"] {
+  box-shadow: inset 3px 0 0 var(--bpw-record);
+}
+
+.bpw-panel-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+  background: var(--bpw-bg-elevated);
+}
+
+.bpw-chip {
+  margin: 0;
+  padding: 3px 10px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--bpw-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bpw-chip--active {
+  border-color: rgb(20 118 255 / 45%);
+  background: rgb(20 118 255 / 18%);
+  color: var(--bpw-text);
+}
+
+.bpw-rec-hint {
+  margin-left: auto;
+  color: var(--bpw-record);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bpw-editor {
+  flex: 1 1 auto;
+  min-height: 180px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  resize: vertical;
+  background: #12151b;
+  color: var(--bpw-text);
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  outline: none;
 }
 
 .bpw-code {
@@ -526,7 +800,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: min(420px, calc(100vw - 32px));
+  min-width: min(480px, calc(100vw - 32px));
   padding: 8px 10px 8px 12px;
   border: 1px solid var(--bpw-border);
   border-radius: 999px;
@@ -583,6 +857,12 @@ onBeforeUnmount(() => {
   animation: bpw-pulse 1.2s ease-in-out infinite;
 }
 
+.bpw-status[data-tone="recording"] .bpw-dot {
+  background: var(--bpw-record);
+  box-shadow: 0 0 0 3px rgb(225 29 72 / 28%);
+  animation: bpw-pulse 1s ease-in-out infinite;
+}
+
 .bpw-status-text {
   flex: 1 1 auto;
   overflow: hidden;
@@ -625,17 +905,67 @@ onBeforeUnmount(() => {
     background 0.12s ease;
 }
 
-.bpw-btn:hover {
+.bpw-btn:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 
-.bpw-btn:active {
+.bpw-btn:active:not(:disabled) {
   transform: translateY(1px);
 }
 
 .bpw-btn:focus-visible {
   outline: 2px solid #9ec5ff;
   outline-offset: 2px;
+}
+
+.bpw-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bpw-btn--record {
+  border-color: rgb(225 29 72 / 55%);
+  background: linear-gradient(180deg, #2a2f3a 0%, #1e222b 100%);
+}
+
+.bpw-btn--rec-on {
+  border-color: var(--bpw-record);
+  background: rgb(225 29 72 / 22%);
+}
+
+.bpw-rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bpw-record);
+  box-shadow: 0 0 0 2px rgb(225 29 72 / 25%);
+}
+
+.bpw-btn--rec-on .bpw-rec-dot {
+  animation: bpw-pulse 1s ease-in-out infinite;
+}
+
+.bpw-btn--ghost {
+  border-color: rgb(255 255 255 / 16%);
+  background: #2a2f3a;
+  color: var(--bpw-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.bpw-btn--assert-on {
+  border-color: var(--bpw-paused);
+  background: rgb(245 197 66 / 18%);
+  color: var(--bpw-paused);
+}
+
+.bpw-btn--kind {
+  width: auto;
+  min-width: 30px;
+  padding: 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
 }
 
 @keyframes bpw-pulse {

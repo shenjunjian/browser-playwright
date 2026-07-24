@@ -256,6 +256,13 @@ export function querySelector(
   return result[0];
 }
 
+/** Inspector / recorder chrome; must not participate in page locators. */
+export const BPW_UI_ATTR = "data-bpw-ui";
+
+function isBpwUiChrome(el: Element): boolean {
+  return !!el.closest(`[${BPW_UI_ATTR}]`);
+}
+
 /** Resolve a selector string against a document, crossing same-origin iframes. */
 export function queryAllInDocument(
   selector: string,
@@ -263,7 +270,7 @@ export function queryAllInDocument(
 ): Element[] {
   const frames = splitSelectorByFrame(selector);
   if (frames.length === 1)
-    return querySelectorAll(frames[0], document);
+    return querySelectorAll(frames[0], document).filter((el) => !isBpwUiChrome(el));
 
   let roots: (Document | Element)[] = [document];
   for (let i = 0; i < frames.length; i++) {
@@ -272,7 +279,7 @@ export function queryAllInDocument(
     for (const root of roots) {
       const elements = querySelectorAll(parsed, root);
       if (i === frames.length - 1) {
-        next.push(...elements);
+        next.push(...elements.filter((el) => !isBpwUiChrome(el)));
       } else {
         for (const el of elements) {
           if (el.nodeName !== "IFRAME" && el.nodeName !== "FRAME")

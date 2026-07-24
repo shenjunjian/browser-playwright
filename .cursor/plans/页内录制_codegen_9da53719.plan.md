@@ -4,19 +4,19 @@ overview: 在 core 新增页内 Recorder（事件捕获 + locator 逆向生成 +
 todos:
   - id: core-generate-locator
     content: 实现 generateLocator：Element → 唯一 getBy* / CSS 源码字符串
-    status: pending
+    status: completed
   - id: core-recorder-codegen
     content: 实现 startRecording / 事件捕获 / codegen 输出 test() 包装脚本
-    status: pending
+    status: completed
   - id: core-hover-assert
     content: 悬停高亮 + locator tooltip + Assert 模式生成 expect
-    status: pending
+    status: completed
   - id: vue-inspector-ui
     content: 扩展 BrowserPlaywrightDebugger：Record/Assert/可编辑脚本/回放闭环
-    status: pending
+    status: completed
   - id: site-docs
     content: 演示站验收挂载 + core/vue README 文档
-    status: pending
+    status: completed
 isProject: false
 ---
 

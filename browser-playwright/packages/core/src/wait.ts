@@ -33,9 +33,12 @@ export async function pollUntil<T>(
       lastError = e instanceof Error ? e : new Error(String(e));
     }
     if (deadline && Date.now() >= deadline) {
+      const base =
+        options.message ?? `Timeout ${timeout}ms exceeded`;
       const msg =
-        options.message ??
-        `Timeout ${timeout}ms exceeded${lastError ? `: ${lastError.message}` : ""}`;
+        lastError && !base.includes(lastError.message)
+          ? `${base}: ${lastError.message}`
+          : base;
       throw new Error(msg);
     }
     await new Promise((r) => setTimeout(r, interval));

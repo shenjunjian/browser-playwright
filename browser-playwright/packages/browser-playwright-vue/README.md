@@ -1,20 +1,23 @@
 # browser-playwright-vue
 
-面向 Vue 3 的**页内 Playwright 调试组件**。在业务页面右下角挂载浮动面板，把一段 Playwright 风格脚本交给 `browser-playwright` 的 `runScript` 执行，支持播放 / 暂停 / 单步 / 停止，并展示逐步高亮与测试结果。
+面向 Vue 3 的**页内 Playwright Inspector**。在业务页面右下角挂载浮动面板，支持：
+
+- 把 Playwright 风格脚本交给 `runScript` **播放 / 暂停 / 单步**
+- **Record** 录制真实用户操作，生成带 `test()` 包装的脚本
+- **Assert** 模式点击元素追加 `expect`
+- **编辑** 源码后直接回放
 
 ## 目的
 
-`browser-playwright`（core）提供页内 API 与无框架的 `runScript`。本包在其上提供可视化调试壳：
+`browser-playwright`（core）提供页内 API、`runScript` 与 `startRecording`。本包在其上提供可视化壳：
 
 | 目标 | 说明 |
 |------|------|
 | 页面级调试 | 不启动 Node Playwright；脚本在当前业务页里跑 |
-| 悬浮 UI | `Teleport` 到 `body`，固定右下角，不侵入业务布局 |
-| 播放控制 | 播放、暂停、单步、停止，对应 `runScript` 控制器 |
-| 源码同步 | 展开后按行高亮当前语句，失败步骤可回溯 |
-| 结果汇总 | 结束后展示 passed / failed / skipped 与各 `test()` 用例状态 |
-
-典型场景：在 Vue 工程里挂上调试条，把已有 Playwright 风格脚本当字符串传入，边看页面边逐步验收。
+| 录制 codegen | 监听可信用户事件，生成可回放脚本 |
+| 悬浮 UI | `Teleport` 到 `body`，固定右下角；根节点带 `data-bpw-ui` 避免录到自己 |
+| 播放控制 | 播放、暂停、单步、停止 |
+| 可编辑源码 | 展开后可在「预览 / 编辑」间切换 |
 
 ## 安装与构建
 
@@ -42,42 +45,43 @@ pnpm --filter browser-playwright-vue build
 ## 快速接入
 
 ```ts
-// 例如 App.vue
 import { BrowserPlaywrightDebugger } from 'browser-playwright-vue'
 import 'browser-playwright-vue/style.css'
 ```
 
 ```vue
 <script setup lang="ts">
+import { ref } from 'vue'
 import { BrowserPlaywrightDebugger } from 'browser-playwright-vue'
 import 'browser-playwright-vue/style.css'
 
-const script = `import { test, expect } from 'browser-playwright'
+const script = ref(`import { test, expect } from 'browser-playwright'
 
 test('弹窗的事件', async ({ page }) => {
-  page.on('pageerror', (exception) => expect(exception).toBeNull())
-  await page.goto('modal#modal-event')
-  const content = page.locator('.is-message')
-  await page.getByRole('button', { name: '打开带事件弹窗' }).first().click()
-  await expect(content).toHaveText(/show 事件触发了/)
+  await page.getByRole('button', { name: '打开带事件弹窗' }).click()
+  await expect(page.getByTestId('modal-message')).toHaveText('show 事件触发了')
 })
-`
+`)
 </script>
 
 <template>
   <!-- 业务页面 … -->
-  <BrowserPlaywrightDebugger :script="script" />
+  <BrowserPlaywrightDebugger v-model:script="script" />
 </template>
 ```
 
 演示站 `apps/site` 即按此方式挂载；本地可 `pnpm dev` 打开页面右下角面板试用。
 
-## Props
+## Props / Events
 
 | Prop | 类型 | 默认 | 说明 |
 |------|------|------|------|
-| `script` | `string` | （必填） | Playwright 风格脚本全文。变更后会重新 `runScript` |
-| `autoPlay` | `boolean` | `false` | 为 `true` 时挂载 / 脚本变更后自动连续执行；默认需点「播放」或「单步」 |
+| `script` | `string` | 空骨架 `test('recorded'…)` | 初始脚本；变更会重新准备回放 |
+| `autoPlay` | `boolean` | `false` | 为 `true` 时挂载 / 脚本变更后自动连续执行 |
+
+| Event | 说明 |
+|-------|------|
+| `update:script` | 录制更新或用户编辑时同步脚本（支持 `v-model:script`） |
 
 导出：
 
@@ -89,70 +93,72 @@ import { BrowserPlaywrightDebugger } from 'browser-playwright-vue'
 
 ## 界面与操作
 
-面板通过 `Teleport` 挂到 `document.body`，`z-index` 极高，避免被业务遮挡。
+面板通过 `Teleport` 挂到 `document.body`，`z-index` 极高，避免被业务遮挡。根节点带 `data-bpw-ui`，录制时忽略面板自身。
 
 ### 折叠条（默认）
 
-- 状态点 + 当前语句摘要（Ready / 运行中文案 / Paused / Failed / 完成汇总）
+- 状态点 + 当前摘要（Ready / Recording / 运行中 / Paused / Failed / 完成汇总）
 - 点击摘要区域：展开或收起源码面板
 - 右侧工具栏：
 
 | 按钮 | 行为 |
 |------|------|
-| 播放 | 连续执行；若已结束或无控制器则重新开跑并播放 |
-| 暂停 | 停在下一检查点（`controller.pause()`） |
-| 单步 | 执行下一步；结束后同样可重新开跑再单步 |
-| 停止 | `stop()`，结束本次运行 |
+| 红点 Record | 开始 / 停止录制；录制时悬停高亮 locator，点击写入脚本 |
+| ∃ Assert | 仅录制中可用；开启后点击元素生成 `expect(...).toBeVisible()` |
+| vis / txt | 在 Assert 模式下切换 `toBeVisible` / `toHaveText` |
+| 播放 | 连续执行当前脚本 |
+| 暂停 | 回放暂停，或录制暂停捕获 |
+| 单步 | 执行下一步 |
+| 停止 | 结束回放，或停止录制并保留脚本 |
 
 ### 展开面板
 
-- **源码区**：按行展示 `script`，当前行高亮（running / paused / failed / passed）
-- **结果**：`passed · failed · skipped · N tests`，以及每个 `test()` 的 `status · title · duration`
-- **失败步骤**：步进失败时记录行号与错误信息
+- **预览**：按行展示脚本，当前行高亮
+- **编辑**：`<textarea>` 直接改脚本，可再点播放验收
+- **结果**：`passed · failed · skipped` 与各 `test()` 状态
+- **失败步骤**：步进失败时的行号与错误
 
-状态色：绿 = 通过，红 = 失败，黄 = 暂停，蓝 = 运行中。
+## 录制 → 回放闭环
 
-## 与 `runScript` 的关系
+1. 点红点开始 Record
+2. 在业务页操作（可选打开 Assert 再点元素加断言）
+3. 再点红点停止；脚本已写入面板
+4. 点播放用 `runScript` 回放
 
-组件内部调用 core 的 `runScript(script, { autoPlay, onStep })`：
+底层 API 见 [core README · 录制 / Recorder](../core/README.md)。
+
+## 与 `runScript` / `startRecording` 的关系
 
 ```ts
-import { runScript } from 'browser-playwright'
+import { runScript, startRecording } from 'browser-playwright'
 
-const ctrl = runScript(props.script, {
-  autoPlay: props.autoPlay,
-  onStep: (e) => {
-    // e.line, e.status: 'running' | 'passed' | 'failed' | 'paused'
-    // e.message? 失败时有错误信息
-  },
+// 回放
+const ctrl = runScript(script, { autoPlay, onStep })
+
+// 录制
+const rec = startRecording({
+  onUpdate: (script) => { /* 写入面板 */ },
 })
-
-ctrl.play()
-ctrl.pause()
-ctrl.step()
-ctrl.stop()
-await ctrl.result // TestResult
+rec.setAssertMode(true)
+rec.stop()
 ```
 
-脚本内可使用注入的 `test`、`expect`、`page`（与 core README 中 `runScript` 说明一致）。信任模型与 `eval` 相同：只应传入调用方明确可控的脚本。
-
-`script` 或 `autoPlay` 变化时组件会停止旧控制器并重新 `startRun()`。卸载时自动 `stop()`。
+信任模型与 `eval` 相同：只应传入调用方明确可控的脚本。
 
 ## 样式
 
-务必引入包样式，否则浮动条无布局与配色：
+务必引入包样式：
 
 ```ts
 import 'browser-playwright-vue/style.css'
 ```
 
-样式为组件 `scoped` 产物；根节点 class 前缀为 `bpw-`（如 `bpw-root`、`bpw-bar`）。若需覆盖主题，可在业务里针对这些类写更高优先级规则，或后续再扩展 CSS 变量覆盖方式。
-
-当前内置 CSS 变量（组件根上）：
+根节点 class 前缀为 `bpw-`。内置 CSS 变量：
 
 | 变量 | 用途 |
 |------|------|
 | `--bpw-primary` | 主色 / 运行中 |
+| `--bpw-record` | 录制红点 |
 | `--bpw-bg` / `--bpw-bg-elevated` | 面板背景 |
 | `--bpw-text` / `--bpw-muted` | 正文 / 次要文字 |
 | `--bpw-passed` / `--bpw-failed` / `--bpw-paused` | 状态色 |
@@ -160,17 +166,17 @@ import 'browser-playwright-vue/style.css'
 ## 使用注意
 
 1. **环境**：在浏览器里的 Vue 3 应用中使用；不是 Node 端 Playwright UI。
-2. **脚本能力边界**：与 `browser-playwright` 相同——页内导航、合成事件、`fetch`/`XHR` 拦截等，详见 [core README](../core/README.md)。
+2. **脚本能力边界**：与 `browser-playwright` 相同，详见 [core README](../core/README.md)。
 3. **安全**：`script` 会被执行；勿拼接不可信用户输入。
 4. **样式引入**：忘记 `style.css` 时面板几乎不可见或错位。
-5. **业务页面**：脚本操作的是当前真实 DOM；请保证演示页上有对应按钮、文案、路由等目标。
+5. **录制忽略**：业务侧若有浮动工具条不想被录，也可加 `data-bpw-ui`。
 
 ## 相关包
 
 | 包 | 职责 |
 |----|------|
-| `browser-playwright` | 页内 API + `runScript` |
-| `browser-playwright-vue`（本包） | 浮动调试 UI |
+| `browser-playwright` | 页内 API + `runScript` + `startRecording` |
+| `browser-playwright-vue`（本包） | 浮动 Inspector UI |
 | `apps/site` | monorepo 演示与验收 |
 
 更多仓库约定见仓库根目录 [`AGENT.md`](../../../AGENT.md)。
