@@ -10,7 +10,18 @@
 
 这套流程对自动化测试非常成熟，却也带来明显的门槛：**无法在纯前端环境里「开箱即用」**。如果你想在 Vue / React 业务页面里直接调试一段 Playwright 脚本、让 QA 在页面上录制操作、或在无 Node 环境的场景里做页内验收，官方方案并不顺手。
 
-于是我们开发了 **browser-playwright**——一个**纯前端运行**的 Playwright 兼容库。它把常用的 `Page`、`Locator`、`expect`、`test` 等 API 搬到了浏览器页面内部执行，无需安装专用 Chrome、无需启动 Browser / BrowserServer，**当前页面就是测试上下文**。既有脚本可以较低成本迁移到页内运行，也可以配合录制与调试工具，嵌入任意前端工程。开源地址： [https://github.com/shenjunjian/browser-playwright](https://github.com/shenjunjian/browser-playwright),欢迎大家来Star一下，或提建议！
+于是我们开发了 **browser-playwright**——一个**纯前端运行**的 Playwright 兼容库。它把常用的 `Page`、`Locator`、`expect`、`test` 等 API 搬到了浏览器页面内部执行，无需安装专用 Chrome、无需启动 Browser / BrowserServer，**当前页面就是测试上下文**。既有脚本可以较低成本迁移到页内运行，也可以配合录制与调试工具，嵌入任意前端工程。开源地址：[https://github.com/shenjunjian/browser-playwright](https://github.com/shenjunjian/browser-playwright)，欢迎大家来 Star 一下，或提建议！
+
+### 适用场景
+
+| 场景 | 说明 |
+|------|------|
+| **前端自动化测试** | 在 Vue / React 等业务页内直接运行 Playwright 风格脚本，做组件级或页面级 E2E 验收，无需单独起 Node Playwright 进程 |
+| **交互测试** | 通过 `runScript` 逐步调试点击、输入、断言等交互流程，实时查看每一步的执行状态与失败位置 |
+| **前端录制 Playwright 脚本** | 用 `startRecording` 或 `browser-playwright-vue` 的 Record 功能，在真实页面上操作并自动生成可回放的 `test(...)` 脚本 |
+| **构建 Web MCP 工具函数** | 将 `page`、`locator`、`runScript` 等能力封装为浏览器侧 MCP Tool，智能体在页内调用，实现「看页面 → 执行动作 → 断言结果」的闭环 |
+
+同一套 Playwright 兼容 API 贯穿测试、调试与 Agent 集成，降低多套自动化方案之间的切换成本。
 
 ---
 
