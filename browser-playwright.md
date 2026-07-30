@@ -10,11 +10,12 @@
 
 这套流程对自动化测试非常成熟，却也带来明显的门槛：**无法在纯前端环境里「开箱即用」**。如果你想在 Vue / React 业务页面里直接调试一段 Playwright 脚本、让 QA 在页面上录制操作、或在无 Node 环境的场景里做页内验收，官方方案并不顺手。
 
-于是我们开发了 **browser-playwright**——一个**纯前端运行**的 Playwright 兼容库。它把常用的 `Page`、`Locator`、`expect`、`test` 等 API 搬到了浏览器页面内部执行，无需安装专用 Chrome、无需启动 Browser / BrowserServer，**当前页面就是测试上下文**。既有脚本可以较低成本迁移到页内运行，也可以配合录制与调试工具，嵌入任意前端工程。
+于是我们开发了 **browser-playwright**——一个**纯前端运行**的 Playwright 兼容库。它把常用的 `Page`、`Locator`、`expect`、`test` 等 API 搬到了浏览器页面内部执行，无需安装专用 Chrome、无需启动 Browser / BrowserServer，**当前页面就是测试上下文**。既有脚本可以较低成本迁移到页内运行，也可以配合录制与调试工具，嵌入任意前端工程。开源地址： [https://github.com/shenjunjian/browser-playwright](https://github.com/shenjunjian/browser-playwright),欢迎大家来Star一下，或提建议！
 
 ---
 
 ## browser-playwright 快速上手
+
 
 ### 安装
 
@@ -37,10 +38,6 @@ import { test, expect, createPage, runTests } from 'browser-playwright'
 const page = createPage()
 
 test('弹窗的事件', async ({ page }) => {
-  page.on('pageerror', (exception) => expect(exception).toBeNull())
-
-  await page.goto('modal#modal-event')
-
   const content = page.locator('.is-message')
   await page.getByRole('button', { name: '打开带事件弹窗' }).first().click()
   await expect(content).toHaveText(/show 事件触发了/)
