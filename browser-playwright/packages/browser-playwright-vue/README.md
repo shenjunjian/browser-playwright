@@ -78,6 +78,7 @@ test('弹窗的事件', async ({ page }) => {
 |------|------|------|------|
 | `script` | `string` | 空骨架 `test('recorded'…)` | 初始脚本；变更会重新准备回放 |
 | `autoPlay` | `boolean` | `false` | 为 `true` 时挂载 / 脚本变更后自动连续执行 |
+| `stepDelay` | `number` | `100` | 播放模式下每步检查点之后的间隔（毫秒）；面板不展示该控件，传 `0` 关闭 |
 
 | Event | 说明 |
 |-------|------|
@@ -132,7 +133,7 @@ import { BrowserPlaywrightDebugger } from 'browser-playwright-vue'
 import { runScript, startRecording } from 'browser-playwright'
 
 // 回放
-const ctrl = runScript(script, { autoPlay, onStep })
+const ctrl = runScript(script, { autoPlay, stepDelay, onStep })
 
 // 录制
 const rec = startRecording({

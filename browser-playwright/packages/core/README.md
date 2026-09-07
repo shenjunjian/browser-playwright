@@ -296,7 +296,7 @@ await runTests({ page })
 
 ### `runScript`
 
-无框架依赖：把 Playwright 风格脚本当作字符串执行，按语句边界步进，并暴露播放控制。
+无框架依赖：把 Playwright 风格脚本当作字符串执行，按语句边界步进，并暴露播放控制。`play()` 时每个检查点之后默认等待 `stepDelay`（100ms）；暂停 / 单步不生效，传 `0` 关闭。
 
 ```ts
 import { runScript } from 'browser-playwright'
@@ -311,6 +311,7 @@ test('弹窗的事件', async ({ page }) => {
 
 const ctrl = runScript(script, {
   autoPlay: false,
+  stepDelay: 100, // 播放模式下每个检查点之后的间隔（ms）；暂停 / 单步不生效，0 关闭
   onStep: (e) => {
     // e.line, e.status: 'running' | 'passed' | 'failed' | 'paused'
     // e.message? 失败时有错误信息

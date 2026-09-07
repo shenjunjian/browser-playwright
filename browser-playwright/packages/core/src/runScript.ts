@@ -39,6 +39,7 @@ export function runScript(
 ): RunScriptController {
   const page: Page = options?.page ?? createPage();
   const onStep = options?.onStep;
+  const stepDelay = options?.stepDelay ?? 100;
 
   let mode: PlayMode = options?.autoPlay ? "play" : "pause";
   let stepCredits = 0;
@@ -103,6 +104,10 @@ export function runScript(
 
       if (shouldStop()) throw new RunScriptStoppedError();
       emit({ line, status: "running" });
+
+      if (mode === "play" && stepDelay > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, stepDelay));
+      }
     },
   };
 

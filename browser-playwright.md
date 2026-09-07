@@ -98,7 +98,7 @@ await expect(page.locator('.msg')).toHaveCount(1, { timeout: 3_000 })
 
 ### runScript
 
-在页面内执行 Playwright 风格脚本文本，按语句边界步进，并提供播放 / 暂停 / 单步 / 停止控制。
+在页面内执行 Playwright 风格脚本文本，按语句边界步进，并提供播放 / 暂停 / 单步 / 停止控制。播放（`play()`）时，每个检查点之后默认等待 `stepDelay`（100ms），便于观察逐步执行；暂停与单步不受影响，传 `0` 可关闭间隔。
 
 **函数声明：**
 
@@ -111,6 +111,8 @@ function runScript(
 interface RunScriptOptions {
   /** 为 true 时启动即连续执行；默认暂停，需调用 play() / step() */
   autoPlay?: boolean
+  /** 播放模式下每个检查点之后的间隔（毫秒）；暂停 / 单步不生效。默认 100，传 0 关闭 */
+  stepDelay?: number
   /** 每步执行时的回调 */
   onStep?: (event: StepEvent) => void
   /** 脚本内 page fixture 绑定的 Page；默认 createPage() */
@@ -354,6 +356,7 @@ test('弹窗的事件', async ({ page }) => {
 |------|------|------|------|
 | `script` | `string` | 空骨架 `test('recorded'…)` | 初始脚本；变更会重新准备回放 |
 | `autoPlay` | `boolean` | `false` | 为 `true` 时挂载或脚本变更后自动连续执行 |
+| `stepDelay` | `number` | `100` | 播放模式下每步检查点之后的间隔（毫秒）；界面不展示，传 `0` 关闭 |
 
 | Event | 说明 |
 |-------|------|

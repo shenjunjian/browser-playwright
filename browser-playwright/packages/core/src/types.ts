@@ -27,6 +27,11 @@ export interface StepEvent {
 export interface RunScriptOptions {
   /** When true, start in play mode; default is paused until `play()` / `step()`. */
   autoPlay?: boolean;
+  /**
+   * Delay in ms after each checkpoint while `play()` is running.
+   * Ignored for pause / step. Default 100; pass 0 to disable.
+   */
+  stepDelay?: number;
   onStep?: (event: StepEvent) => void;
   /** Bind script `page` fixture; defaults to `createPage()`. */
   page?: Page;

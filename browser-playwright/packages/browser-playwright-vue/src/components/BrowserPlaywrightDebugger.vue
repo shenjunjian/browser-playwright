@@ -22,10 +22,13 @@ const props = withDefaults(
     /** Initial script. Editable locally; emit `update:script` on change. */
     script?: string;
     autoPlay?: boolean;
+    /** Play-mode delay after each checkpoint, in ms. Default 100; pass 0 to disable. */
+    stepDelay?: number;
   }>(),
   {
     script: "",
     autoPlay: false,
+    stepDelay: 100,
   },
 );
 
@@ -232,6 +235,7 @@ function startRun() {
 
   const ctrl = runScript(scriptText.value, {
     autoPlay: props.autoPlay,
+    stepDelay: props.stepDelay,
     onStep,
   });
   controller = ctrl;
@@ -399,6 +403,13 @@ watch(
 
 watch(
   () => props.autoPlay,
+  () => {
+    if (!recording.value) startRun();
+  },
+);
+
+watch(
+  () => props.stepDelay,
   () => {
     if (!recording.value) startRun();
   },
