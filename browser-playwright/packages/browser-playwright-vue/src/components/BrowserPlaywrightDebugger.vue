@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   runScript,
   startRecording,
@@ -46,8 +46,24 @@ const assertions = ref<
   Array<{ line: number; status: "passed" | "failed"; message?: string }>
 >([]);
 const recording = ref(false);
-const assertMode = ref(false);
-const assertKind = ref<AssertKind>("toBeVisible");
+
+type RecordIntent = "click" | AssertKind;
+
+const RECORD_INTENTS: { value: RecordIntent; label: string }[] = [
+  { value: "click", label: "点击" },
+  { value: "toBeVisible", label: "断言可见" },
+  { value: "toHaveText", label: "断言文本" },
+];
+
+const recordIntent = ref<RecordIntent>("click");
+const recordMenuOpen = ref(false);
+const recordMenuRoot = ref<HTMLElement | null>(null);
+
+const recordIntentLabel = computed(
+  () =>
+    RECORD_INTENTS.find((item) => item.value === recordIntent.value)?.label ??
+    "点击",
+);
 
 const lineRefs = ref<Record<number, HTMLElement | null>>({});
 
@@ -98,10 +114,7 @@ function highlightLine(line: string): string {
 }
 
 const currentStatement = computed(() => {
-  if (recording.value) {
-    if (assertMode.value) return `Recording · Assert (${assertKind.value})`;
-    return "Recording…";
-  }
+  if (recording.value) return `Recording · ${recordIntentLabel.value}`;
   if (finished.value && result.value) {
     const { passed, failed } = result.value;
     if (failed > 0) return `Failed · ${passed} passed, ${failed} failed`;
@@ -200,7 +213,7 @@ function stopRecorder() {
   }
   recorder = null;
   recording.value = false;
-  assertMode.value = false;
+  recordMenuOpen.value = false;
 }
 
 function startRun() {
@@ -304,22 +317,39 @@ function toggleRecord() {
     },
   });
   recording.value = true;
-  if (assertMode.value) {
-    recorder.setAssertMode(true, assertKind.value);
+  applyRecordIntent();
+}
+
+function applyRecordIntent() {
+  if (!recorder) return;
+  if (recordIntent.value === "click") {
+    recorder.setAssertMode(false);
+    return;
   }
+  recorder.setAssertMode(true, recordIntent.value);
 }
 
-function toggleAssert() {
-  if (!recording.value) return;
-  assertMode.value = !assertMode.value;
-  recorder?.setAssertMode(assertMode.value, assertKind.value);
+function toggleRecordMenu() {
+  recordMenuOpen.value = !recordMenuOpen.value;
 }
 
-function cycleAssertKind() {
-  if (!recording.value || !assertMode.value) return;
-  assertKind.value =
-    assertKind.value === "toBeVisible" ? "toHaveText" : "toBeVisible";
-  recorder?.setAssertMode(true, assertKind.value);
+function setRecordIntent(intent: RecordIntent) {
+  recordIntent.value = intent;
+  recordMenuOpen.value = false;
+  if (recording.value) applyRecordIntent();
+}
+
+function onDocPointerDown(event: PointerEvent) {
+  if (!recordMenuOpen.value) return;
+  const root = recordMenuRoot.value;
+  if (root && event.target instanceof Node && root.contains(event.target)) {
+    return;
+  }
+  recordMenuOpen.value = false;
+}
+
+function onDocKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") recordMenuOpen.value = false;
 }
 
 function toggleExpand() {
@@ -377,7 +407,14 @@ watch(
 // Initial run (playback ready, not auto unless autoPlay)
 startRun();
 
+onMounted(() => {
+  document.addEventListener("pointerdown", onDocPointerDown, true);
+  document.addEventListener("keydown", onDocKeydown);
+});
+
 onBeforeUnmount(() => {
+  document.removeEventListener("pointerdown", onDocPointerDown, true);
+  document.removeEventListener("keydown", onDocKeydown);
   runToken++;
   stopController();
   if (recorder) {
@@ -425,24 +462,26 @@ onBeforeUnmount(() => {
             </span>
           </div>
 
-          <textarea
-            v-if="editing"
-            class="bpw-editor"
-            :value="scriptText"
-            spellcheck="false"
-            aria-label="editable script"
-            @input="onEditorInput"
-          />
+          <div class="bpw-body">
+            <textarea
+              v-if="editing"
+              class="bpw-editor"
+              :value="scriptText"
+              spellcheck="false"
+              aria-label="editable script"
+              @input="onEditorInput"
+            />
 
-          <div v-else class="bpw-code" aria-label="source">
-            <div
-              v-for="(line, idx) in lines"
-              :key="idx"
-              :ref="(el) => setLineRef(idx + 1, el as Element | null)"
-              :class="lineClass(idx + 1)"
-            >
-              <span class="bpw-gutter">{{ idx + 1 }}</span>
-              <code class="bpw-code-text" v-html="highlightLine(line)"></code>
+            <div v-else class="bpw-code" aria-label="source">
+              <div
+                v-for="(line, idx) in lines"
+                :key="idx"
+                :ref="(el) => setLineRef(idx + 1, el as Element | null)"
+                :class="lineClass(idx + 1)"
+              >
+                <span class="bpw-gutter">{{ idx + 1 }}</span>
+                <code class="bpw-code-text" v-html="highlightLine(line)"></code>
+              </div>
             </div>
           </div>
 
@@ -515,28 +554,44 @@ onBeforeUnmount(() => {
             >
               <span class="bpw-rec-dot" aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              class="bpw-btn bpw-btn--ghost"
-              :class="{ 'bpw-btn--assert-on': assertMode && recording }"
-              title="断言模式（录制时点击元素生成 expect）"
-              aria-label="断言模式"
-              :disabled="!recording"
-              :aria-pressed="assertMode"
-              @click="toggleAssert"
-            >
-              ∃
-            </button>
-            <button
-              type="button"
-              class="bpw-btn bpw-btn--ghost bpw-btn--kind"
-              title="切换断言类型 toBeVisible / toHaveText"
-              aria-label="切换断言类型"
-              :disabled="!recording || !assertMode"
-              @click="cycleAssertKind"
-            >
-              {{ assertKind === "toBeVisible" ? "vis" : "txt" }}
-            </button>
+            <div ref="recordMenuRoot" class="bpw-select">
+              <button
+                type="button"
+                class="bpw-btn bpw-btn--ghost bpw-select-trigger"
+                :class="{
+                  'bpw-btn--assert-on': recording && recordIntent !== 'click',
+                }"
+                title="录制动作：点击 / 断言可见 / 断言文本"
+                aria-label="录制动作类型"
+                aria-haspopup="listbox"
+                :aria-expanded="recordMenuOpen"
+                @click="toggleRecordMenu"
+              >
+                <span>{{ recordIntentLabel }}</span>
+                <span class="bpw-select-caret" aria-hidden="true">▾</span>
+              </button>
+              <div
+                v-if="recordMenuOpen"
+                class="bpw-select-menu"
+                role="listbox"
+                aria-label="录制动作类型"
+              >
+                <button
+                  v-for="opt in RECORD_INTENTS"
+                  :key="opt.value"
+                  type="button"
+                  role="option"
+                  class="bpw-select-option"
+                  :class="{
+                    'bpw-select-option--active': recordIntent === opt.value,
+                  }"
+                  :aria-selected="recordIntent === opt.value"
+                  @click="setRecordIntent(opt.value)"
+                >
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
             <button
               type="button"
               class="bpw-btn"
@@ -571,7 +626,7 @@ onBeforeUnmount(() => {
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
                 <path
                   fill="currentColor"
-                  d="M3 2h2v12H3V2zm4 5.5L13 2v12L7 8.5z"
+                  d="M2.75 6.5h6.2L6.6 4.15 7.85 2.9 13.1 8l-5.25 5.1-1.25-1.25 2.35-2.35h-6.2V6.5z"
                 />
               </svg>
             </button>
@@ -619,6 +674,7 @@ onBeforeUnmount(() => {
   right: 20px;
   bottom: 20px;
   z-index: 2147483646;
+  width: min(560px, calc(100vw - 32px));
   max-width: min(560px, calc(100vw - 32px));
   font-family:
     ui-sans-serif,
@@ -637,6 +693,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  width: 100%;
   gap: 0;
   pointer-events: auto;
   filter: drop-shadow(var(--bpw-glow));
@@ -645,6 +702,9 @@ onBeforeUnmount(() => {
 .bpw-panel {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  height: min(460px, calc(100vh - 120px));
   max-height: min(460px, calc(100vh - 120px));
   margin-bottom: 10px;
   overflow: hidden;
@@ -696,13 +756,23 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 
+.bpw-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .bpw-editor {
   flex: 1 1 auto;
-  min-height: 180px;
+  min-height: 0;
+  height: 100%;
   margin: 0;
   padding: 10px 12px;
   border: 0;
-  resize: vertical;
+  resize: none;
+  box-sizing: border-box;
   background: #12151b;
   color: var(--bpw-text);
   font-family:
@@ -719,6 +789,8 @@ onBeforeUnmount(() => {
 
 .bpw-code {
   flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
   overflow: auto;
   padding: 10px 0;
   font-family:
@@ -734,8 +806,9 @@ onBeforeUnmount(() => {
 
 .bpw-line {
   display: grid;
-  grid-template-columns: 40px 1fr;
+  grid-template-columns: 40px minmax(0, 1fr);
   gap: 8px;
+  min-width: 0;
   padding: 0 12px 0 0;
   white-space: pre;
 }
@@ -769,6 +842,7 @@ onBeforeUnmount(() => {
 }
 
 .bpw-code-text {
+  min-width: 0;
   overflow: hidden;
   color: var(--bpw-text);
   font: inherit;
@@ -865,11 +939,16 @@ onBeforeUnmount(() => {
 }
 
 .bpw-bar {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: min(480px, calc(100vw - 32px));
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 8px 10px 8px 12px;
+  overflow: visible;
   border: 1px solid var(--bpw-border);
   border-radius: 999px;
   background: linear-gradient(180deg, #232833 0%, #1a1d24 100%);
@@ -1027,13 +1106,59 @@ onBeforeUnmount(() => {
   color: var(--bpw-paused);
 }
 
-.bpw-btn--kind {
+.bpw-select {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.bpw-select-trigger {
   width: auto;
-  min-width: 30px;
-  padding: 0 6px;
+  min-width: 92px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 4px;
+  justify-content: space-between;
+}
+
+.bpw-select-caret {
   font-size: 10px;
-  letter-spacing: 0.02em;
-  text-transform: lowercase;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.bpw-select-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 3;
+  min-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--bpw-border);
+  border-radius: 10px;
+  background: var(--bpw-bg-elevated);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+
+.bpw-select-option {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--bpw-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bpw-select-option:hover,
+.bpw-select-option--active {
+  background: rgb(20 118 255 / 18%);
 }
 
 @keyframes bpw-pulse {

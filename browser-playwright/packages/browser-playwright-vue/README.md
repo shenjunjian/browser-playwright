@@ -104,8 +104,7 @@ import { BrowserPlaywrightDebugger } from 'browser-playwright-vue'
 | 按钮 | 行为 |
 |------|------|
 | 红点 Record | 开始 / 停止录制；录制时悬停高亮 locator，点击写入脚本 |
-| ∃ Assert | 仅录制中可用；开启后点击元素生成 `expect(...).toBeVisible()` |
-| vis / txt | 在 Assert 模式下切换 `toBeVisible` / `toHaveText` |
+| 录制动作 | 下拉选择：点击 / 断言可见（`toBeVisible`）/ 断言文本（`toHaveText`） |
 | 播放 | 连续执行当前脚本 |
 | 暂停 | 回放暂停，或录制暂停捕获 |
 | 单步 | 执行下一步 |
