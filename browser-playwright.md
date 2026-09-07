@@ -25,7 +25,7 @@
 
 ---
 
-## browser-playwright 快速上手
+## 一、 browser-playwright 快速上手
 
 
 ### 安装
@@ -74,7 +74,7 @@ console.log(result.passed, result.failed) // 通过 / 失败数量
 
 ### 自定义超时
 
-官方 Playwright 默认超时较长（如 30s）。browser-playwright 为页内场景统一改为 **5 秒**，可按需覆盖：
+官方 Playwright 默认超时较长（如 30s）。browser-playwright 为页内场景统一缩短为 **5 秒**，但你可以按需覆盖为自己需要的超时时间，有以下多种方式：
 
 ```ts
 import { createPage, expect } from 'browser-playwright'
@@ -92,7 +92,7 @@ await expect(page.locator('.msg')).toHaveCount(1, { timeout: 3_000 })
 
 ---
 
-## 新增能力：runScript 与 startRecording
+## 二、 新增能力：runScript 与 startRecording
 
 除了对齐官方 Page / Locator API，browser-playwright 还提供了页内调试与录制能力，便于在业务页面里「写脚本 → 逐步跑 → 看结果」。
 
@@ -265,7 +265,7 @@ const script = generateScript([{ kind: 'click', locator }])
 
 ---
 
-## 与官方 Playwright 的差异
+## 三、 与官方 Playwright 的差异
 
 browser-playwright **刻意不做** Browser / CDP 层，因此在能力边界上与官方有明确区别。下列 API 对齐较好：Locator 查询、`getByRole` / `getByText` / `getByTestId`、鼠标键盘操作、大部分 `expect` 断言、同源 iframe 的 `FrameLocator` 等。
 
@@ -293,22 +293,13 @@ browser-playwright **刻意不做** Browser / CDP 层，因此在能力边界上
 
 ### 调用即抛错的 API
 
-依赖 Browser / CDP / Inspector 的 API 会抛出 `not supported in-page` 错误，例如：
+依赖 Browser / CDP / Inspector 的 API， 以及 playwright 官方标记为过时的API, 都会抛出 `not supported in-page` 错误，例如以下各API：
 
 `page.$` / `$$` / `$eval` / `$$eval`、`context`、`opener`、`bringToFront`、`pdf`、`video`、`workers`、`pause`、`pickLocator`、`routeFromHAR`、`routeWebSocket`、`waitForRequest`、`waitForResponse` 等。
 
 `page.close()` 仅标记关闭并拆除事件 hook，**不会关闭真实浏览器标签**。
 
-### 默认超时对比
-
-| 场景 | 官方 Playwright（典型） | browser-playwright |
-|------|------------------------|-------------------|
-| 默认 action / navigation 超时 | 30_000 ms | **5_000 ms** |
-| expect 断言超时 | 与 test 配置相关 | 默认 **5_000 ms**，可通过 `{ timeout }` 覆盖 |
-
----
-
-## browser-playwright-vue：Vue 3 页内 Inspector
+## 四、 browser-playwright-vue：
 
 若希望在 Vue 业务项目中获得**可视化**的录制、编辑与回放体验，可以使用配套组件库 **browser-playwright-vue**。它在 `browser-playwright` 之上封装浮动调试面板，Teleport 到页面右下角，提供播放 / 暂停 / 单步 / 停止、Record 录制、Assert 断言、源码编辑等能力。
 
@@ -381,7 +372,7 @@ test('弹窗的事件', async ({ page }) => {
 
 ---
 
-## 两个库如何配合
+## 五、 两个库如何配合
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -401,14 +392,14 @@ test('弹窗的事件', async ({ page }) => {
 
 ---
 
-## 适用场景
+### 适用场景
 
 - 在前端项目里嵌入页内 E2E 脚本，无需单独起 Node Playwright 进程；
 - QA / 开发在真实页面上录制操作，生成可回放的 Playwright 风格脚本；
 - 逐步调试失败用例，看清每一行断言与操作的执行状态；
 - 演示、验收、内网环境等不便安装 Playwright 浏览器的场景。
 
-## 相关链接
+## 六、 相关链接
 
 - npm：[browser-playwright](https://www.npmjs.com/package/browser-playwright)
 - npm：[browser-playwright-vue](https://www.npmjs.com/package/browser-playwright-vue)
@@ -416,4 +407,4 @@ test('弹窗的事件', async ({ page }) => {
 
 ---
 
-*browser-playwright 让 Playwright 脚本走出 Node 进程，直接在浏览器里运行——写一次脚本，在页面上录、编、播、验，一气呵成。*
+*browser-playwright 让 Playwright 脚本走出 Node 进程，直接在浏览器里运行——写一次脚本，同时可以在页面上录、编、播、验，一气呵成。*
